@@ -1,0 +1,19 @@
+# Dependencies
+# This folder contains all the downloaded libraries. It's very large
+# and can be recreated by running `npm install`.
+/node_modules
+
+# Environment Variables
+# This file contains your secret keys, passwords, and database URL.
+# It should NEVER be uploaded to GitHub.
+.env
+
+# Logs
+# Ignores log files that can be generated during debugging.
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Optional: Editor-specific files
+# For example, if you use Visual Studio Code
+.vscode/
