@@ -1451,6 +1451,42 @@ app.delete('/api/menuitems/:id', async (req, res) => {
 // GET polls with options by restaurantId
 // Add this new route to your server.js file
 
+app.delete('/api/polls/:id', async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+
+  try {
+    // Begin a transaction to ensure both deletions succeed or fail together
+    await client.query('BEGIN');
+
+    // First, delete all options associated with the poll to maintain data integrity
+    await client.query('DELETE FROM polloptions WHERE pollid = $1', [id]);
+    
+    // Then, delete the poll itself from the polls table
+    const result = await client.query('DELETE FROM polls WHERE id = $1', [id]);
+
+    // Check if a row was actually deleted. If not, the poll was not found.
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK'); // Rollback the transaction
+      return res.status(404).json({ error: 'Poll not found.' });
+    }
+
+    // If both deletions were successful, commit the transaction
+    await client.query('COMMIT');
+    res.status(200).json({ message: 'Poll and its options were deleted successfully.' });
+
+  } catch (err) {
+    // If any error occurs, roll back the entire transaction
+    await client.query('ROLLBACK');
+    console.error(`Error deleting poll ${id}:`, err);
+    res.status(500).json({ error: 'Server error during poll deletion.' });
+  } finally {
+    // Always release the client back to the pool
+    client.release();
+  }
+});
+
+
 app.get('/api/polls', async (req, res) => {
   const { restaurantId } = req.query;
 
