@@ -2045,20 +2045,27 @@ app.post('/api/orders', async (req, res) => {
 
 // GET the active (unpaid) order for a specific table
 // This replaces your existing /api/orders/by-table route
-app.get('/api/orders/by-table', async (req, res) => {
-  const { restaurantId, tableNumber } = req.query;
+// In server.js
 
-  if (!restaurantId || !tableNumber) {
-    return res.status(400).json({ error: 'Restaurant ID and Table Number are required' });
+// GET the active (unpaid) order for a specific table
+// This replaces your existing /api/orders/by-table route
+app.get('/api/orders/by-table', async (req, res) => {
+  // ✅ FIX: Read categoryId from the query parameters.
+  const { restaurantId, tableNumber, categoryId } = req.query;
+
+  // ✅ FIX: Add categoryId to the validation.
+  if (!restaurantId || !tableNumber || !categoryId) {
+    return res.status(400).json({ error: 'Restaurant ID, Table Number, and Category ID are required' });
   }
 
   try {
-    // Find the single active (unpaid) order for this table, most recent first
+    // ✅ FIX: The query now uses categoryId to uniquely identify the table's order.
     const orderResult = await pool.query(
       `SELECT * FROM orders 
-       WHERE restaurantid = $1 AND tablenumber = $2 AND ispaid = false 
+       WHERE restaurantid = $1 AND tablenumber = $2 AND categoryid = $3 AND ispaid = false 
        ORDER BY orderdate DESC LIMIT 1`,
-      [restaurantId, tableNumber]
+      // ✅ FIX: Pass categoryId as a parameter to the query.
+      [restaurantId, tableNumber, categoryId]
     );
 
     if (orderResult.rowCount === 0) {
