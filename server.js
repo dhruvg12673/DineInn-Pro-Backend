@@ -1435,16 +1435,24 @@ app.put('/api/menuitems/:id', async (req, res) => {
 app.delete('/api/menuitems/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('DELETE FROM menuitems WHERE id = $1 RETURNING *', [id]);
+    // Instead of deleting, we update the is_available flag to false.
+    const result = await pool.query(
+      'UPDATE menuitems SET is_available = false WHERE id = $1 RETURNING *', 
+      [id]
+    );
+
     if (result.rowCount === 0) {
         return res.status(404).json({ error: 'Menu item not found.' });
     }
-    res.status(204).send(); // 204 No Content is standard for a successful delete
+    // 204 No Content is still appropriate as the item is effectively "gone" from the active menu.
+    res.status(204).send(); 
   } catch (err) {
     console.error('DELETE /menuitems error:', err.message);
-    res.status(500).send('Error deleting menu item');
+    // The foreign key error will no longer happen, but we keep this for other potential errors.
+    res.status(500).send('Error deactivating menu item');
   }
 });
+
 
 
 // ========== POLL ROUTES ==========
@@ -1768,14 +1776,14 @@ app.post('/api/expenses', async (req, res) => {
   }
 
   try {
-    // We INSERT into the lowercase database columns.
+    // We INSERT into the lowercase database columns, which is the Postgres default.
     const result = await pool.query(
       `INSERT INTO expenses 
       (description, amount, totalpaid, staffpaid, paidto, phonenumber, date, restaurantid)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *`,
-      // The values from the request body are passed in order.
-      [description, amount, totalPaid, staffPaid, PaidTo, phoneNumber, date, restaurantId]
+      // ✅ CORRECTED: The variable 'PaidTo' is now correctly cased as 'paidTo'.
+      [description, amount, totalPaid, staffPaid, paidTo, phoneNumber, date, restaurantId]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -1783,6 +1791,7 @@ app.post('/api/expenses', async (req, res) => {
     res.status(500).json({ error: 'Failed to submit expense' });
   }
 });
+
 
 // PUT update an existing expense by its ID
 app.put('/api/expenses/:id', async (req, res) => {
@@ -3017,6 +3026,9 @@ app.put('/api/restaurants/:id/gst', async (req, res) => {
         res.status(500).json({ error: 'Server error while updating GST number.' });
     }
 });
+
+
+
 
 app.get('/api/restaurants/:id', async (req, res) => {
   const restaurantId = parseInt(req.params.id, 10);
