@@ -36,7 +36,7 @@ pool.on('connect', (client) => {
 });
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://dineinpro.vercel.app', 'http://dineinpro.vercel.app', 'https://www.dineinnpro.com', 'https://dine-inn-pro-frontend-b6d1.vercel.app'],
+  origin: ['http://localhost:3000', 'https://dineinpro.vercel.app', 'http://dineinpro.vercel.app', 'https://www.dineinnpro.com', 'https://dine-inn-pro.vercel.app'],
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
