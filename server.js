@@ -3161,6 +3161,37 @@ app.get('/api/restaurants/:id', async (req, res) => {
     console.error(`Error fetching restaurant with ID ${restaurantId}:`, error);
     res.status(500).json({ error: 'Internal server error' });
   }
+  const fs = require('fs');
+const path = require('path');
+
+// Make a folder to store bills if not exists
+const billsDir = path.join(__dirname, 'public', 'bills');
+if (!fs.existsSync(billsDir)) {
+  fs.mkdirSync(billsDir, { recursive: true });
+}
+
+// Serve static files
+app.use('/bills', express.static(billsDir));
+
+app.post('/api/upload-bill', async (req, res) => {
+  try {
+    const { pdfBase64, filename } = req.body;
+    if (!pdfBase64 || !filename) {
+      return res.status(400).json({ error: 'Missing data' });
+    }
+
+    const filePath = path.join(billsDir, filename);
+    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+    fs.writeFileSync(filePath, pdfBuffer);
+
+    // Public URL (example: http://localhost:5000/bills/Bill_123.pdf)
+    const fileUrl = `${req.protocol}://${req.get('host')}/bills/${filename}`;
+    res.json({ url: fileUrl });
+  } catch (err) {
+    console.error('Error saving bill PDF:', err);
+    res.status(500).json({ error: 'Failed to save PDF' });
+  }
+});
 });
 
 
