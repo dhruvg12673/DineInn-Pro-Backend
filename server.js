@@ -768,7 +768,7 @@ app.post('/api/restaurants', async (req, res) => {
             INSERT INTO usercredentials (restaurantid, email, password, role)
             VALUES ($1, $2, $3, $4)
         `;
-        await client.query(userQuery, [restaurantId, adminEmail, hashedPassword]);
+        await client.query(userQuery, [restaurantId, adminEmail, hashedPassword, 'admin']);
 
         await client.query('COMMIT');
         res.status(201).json(newRestaurant);
