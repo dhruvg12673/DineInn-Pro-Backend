@@ -1,7 +1,4 @@
-// server.js
-
-require('dotenv').config();
-
+require("dotenv").config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -21,16 +18,13 @@ const app = express();
 const server = http.createServer(app);
 const port = process.env.PORT || 5000;
 
-// PostgreSQL connection to NeonDB
-import pkg from "pg";
-
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production"
     ? { rejectUnauthorized: false }
     : false,
 });
+
 
 // Middleware
 // Middleware to set timezone for every request
