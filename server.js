@@ -22,11 +22,14 @@ const server = http.createServer(app);
 const port = process.env.PORT || 5000;
 
 // PostgreSQL connection to NeonDB
+import pkg from "pg";
+const { Pool } = pkg;
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  ssl: process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 // Middleware
