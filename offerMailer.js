@@ -1,23 +1,23 @@
+// offerMailer.js
+
 const nodemailer = require('nodemailer');
 
-// --- 1. CORRECTED Nodemailer Transporter Setup ---
-// This explicit configuration is more reliable on cloud platforms like Render
-// and securely uses your environment variables.
+// Configure Nodemailer transporter.
+// IMPORTANT: Use environment variables in a real app to protect your credentials.
 const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false, // Must be false for port 587
+    service: 'gmail', // You can use other services like SendGrid, Mailgun etc.
     auth: {
-        user: process.env.EMAIL_USER, // Loads email from environment variable
-        pass: process.env.EMAIL_PASS  // Loads password from environment variable
+        user: process.env.EMAIL_USER, // Your email address
+        pass: process.env.EMAIL_PASS   // Your email's app-specific password
     },
-    tls: {
-      rejectUnauthorized: false
-    }
 });
 
 /**
  * Sends an email with a PDF attachment to a list of recipients.
+ * @param {object} options - The email options.
+ * @param {string} options.pdf - The base64 encoded PDF string.
+ * @param {string[]} options.emails - An array of recipient email addresses.
+ * @param {string} options.offerTitle - The title of the offer for the email subject.
  */
 async function sendOfferEmail({ pdf, emails, offerTitle }) {
     if (!emails || emails.length === 0) {
@@ -26,8 +26,8 @@ async function sendOfferEmail({ pdf, emails, offerTitle }) {
     }
 
     const mailOptions = {
-        from: '"DineInn Pro Offers" <dineinnpro@gmail.com>', // Set your "from" name
-        to: emails.join(','),
+        from: '"DineInn Pro" <your-email@gmail.com>',
+        to: emails.join(','), // Send to all recipients
         subject: `A Special Offer For You: ${offerTitle}`,
         html: `
             <p>Dear Valued Customer,</p>
@@ -36,28 +36,20 @@ async function sendOfferEmail({ pdf, emails, offerTitle }) {
             <br>
             <p>We look forward to seeing you soon!</p>
             <p>Best,</p>
-            <p>The DineInn Pro Team</p>
+            <p>The Team at Your Restaurant Name</p>
         `,
         attachments: [
             {
                 filename: 'promotional-offer.pdf',
-                // --- 2. CORRECTED PDF Handling ---
-                // This removes the "data:application/pdf;base64," part from the string
-                content: pdf.split("base64,")[1],
+                content: pdf,
                 encoding: 'base64',
                 contentType: 'application/pdf'
             },
         ],
     };
 
-    try {
-        const info = await transporter.sendMail(mailOptions);
-        console.log('✅ Offer emails sent successfully:', info.response);
-        return info;
-    } catch (error) {
-        console.error('❌ Error sending offer emails:', error);
-        throw error;
-    }
+    return transporter.sendMail(mailOptions);
 }
 
+// Export the function to be used in server.js
 module.exports = { sendOfferEmail };
