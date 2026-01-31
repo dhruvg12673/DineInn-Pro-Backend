@@ -1,19 +1,17 @@
 const nodemailer = require('nodemailer');
 
-// --- 1. CORRECTED Nodemailer Transporter Setup ---
-// This explicit configuration is more reliable on cloud platforms like Render.
+// --- Nodemailer Transporter Setup ---
+// This is the core of the email sending functionality.
+// IMPORTANT: Replace with your own Gmail credentials.
 const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false, // true for 465, false for other ports
+    service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,
+        user: process.env.EMAIL_USER,   
         pass: process.env.EMAIL_PASS
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
+}
 });
+
+console.log('Nodemailer transporter configured in emailService.js');
 
 /**
  * Sends the valet token email to a customer.
@@ -25,7 +23,7 @@ const transporter = nodemailer.createTransport({
  */
 const sendTokenEmail = async (toEmail, tokenNumber, ownerName, carNumber) => {
     const mailOptions = {
-        from: '"Your Valet Service" <dineinnpro@gmail.com>', // Use your verified email
+        from: '"Your Valet Service" <dineinnpro@gmail.com>',
         to: toEmail,
         subject: `Your Valet Token: ${tokenNumber}`,
         html: `
@@ -46,16 +44,41 @@ const sendTokenEmail = async (toEmail, tokenNumber, ownerName, carNumber) => {
         `
     };
 
-    // --- 2. CLEANED UP Sending Logic ---
-    // The original async/await try/catch block was correct. The extra code has been removed.
     try {
         const info = await transporter.sendMail(mailOptions);
         console.log('✅ Email sent:', info.response);
         return info.response;
     } catch (error) {
         console.error('❌ Error sending email:', error);
-        throw error; // Propagate the error to be handled by the calling function
+        throw error;
     }
+
+
+
+    // 2. Return a promise that handles the email sending
+    return new Promise((resolve, reject) => {
+        transporter.const.sendEmail = async (to, subject, html) => {
+  console.log("🚀 Sending email to:", to);
+  console.log("📬 Subject:", subject);
+
+  const mailOptions = {
+    from: 'dineinnpro@gmail.com',
+    to,
+    subject,
+    html
+  };
+
+  try {
+    const result = await transporter.sendMail(mailOptions);
+    console.log("✅ Email sent:", result.response);
+    return result;
+  } catch (error) {
+    console.error("❌ Error sending email:", error);
+    throw error;
+  }
+};
+
+  });
 };
 
 // Export the function so it can be used in other files
