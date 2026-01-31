@@ -12,18 +12,12 @@ router.post('/api/send-bill', async (req, res) => {
 
   // Setup transporter using Gmail SMTP
   const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
-
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER, // From your .env file
+      pass: process.env.EMAIL_PASS  // App-specific password (not Gmail login password)
+    }
+  });
 
   // Define the email options
   const mailOptions = {
