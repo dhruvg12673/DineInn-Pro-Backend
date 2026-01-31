@@ -12,12 +12,18 @@ module.exports = (pool) => {
 
   // Your working Nodemailer transport configuration
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
     auth: {
-      user: 'dineinnpro@gmail.com',
-      pass: 'wdqq itrb pkzu pdcw'
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
     }
   });
+
 
   /**
    * @route   POST /api/forgot-password/send-otp
