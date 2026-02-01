@@ -12,12 +12,18 @@ module.exports = (pool) => {
 
   // Your working Nodemailer transport configuration
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
     }
   });
+
 
   /**
    * @route   POST /api/forgot-password/send-otp
@@ -98,7 +104,6 @@ module.exports = (pool) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // ✅ REPLACED: The placeholder comment is now a real database update query.
         await pool.query(
           'UPDATE usercredentials SET password = $1 WHERE email = $2',
           [hashedPassword, email]
