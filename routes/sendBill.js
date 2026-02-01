@@ -10,16 +10,19 @@ router.post('/api/send-bill', async (req, res) => {
     return res.status(400).json({ error: 'Email and PDF are required.' });
   }
 
-  // Setup transporter using Gmail SMTP
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER, // From your .env file
-      pass: process.env.EMAIL_PASS  // App-specific password (not Gmail login password)
-    }
-  });
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  },
+  tls: {
+    rejectUnauthorized: false
+  }
+});
 
-  // Define the email options
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
@@ -35,7 +38,6 @@ router.post('/api/send-bill', async (req, res) => {
   };
 
   try {
-    // Send the email
     await transporter.sendMail(mailOptions);
     console.log(`✅ Email sent to ${email}`);
     res.status(200).json({ message: 'Email sent successfully' });
