@@ -17,8 +17,12 @@ router.post('/api/send-bill', async (req, res) => {
   auth: {
     user: process.env.BREVO_USER,
     pass: process.env.BREVO_PASS
+  },
+  tls: {
+    rejectUnauthorized: false
   }
 });
+
 
 
   const mailOptions = {
