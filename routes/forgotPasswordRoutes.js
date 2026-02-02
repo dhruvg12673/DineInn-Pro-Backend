@@ -18,8 +18,12 @@ module.exports = (pool) => {
   auth: {
     user: process.env.BREVO_USER,
     pass: process.env.BREVO_PASS
+  },
+  tls: {
+    rejectUnauthorized: false
   }
 });
+
 
 
 
