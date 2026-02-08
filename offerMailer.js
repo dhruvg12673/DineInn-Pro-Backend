@@ -1,19 +1,14 @@
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false,
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // ✅ Mandatory for Port 465
   auth: {
-    user: process.env.BREVO_USER,
-    pass: process.env.BREVO_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASS
   }
 });
-
-
 
 async function sendOfferEmail({ pdf, emails, offerTitle }) {
     if (!emails || emails.length === 0) {
@@ -22,7 +17,7 @@ async function sendOfferEmail({ pdf, emails, offerTitle }) {
     }
 
     const mailOptions = {
-        from: '"DineInn Pro Offers" <dineinnpro@gmail.com>',
+        from: `"DineInn Pro Offers" <${process.env.GMAIL_USER}>`,
         to: emails.join(','),
         subject: `A Special Offer For You: ${offerTitle}`,
         attachments: [
