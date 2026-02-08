@@ -11,16 +11,13 @@ module.exports = (pool) => {
   const otpStore = {};
 
   // Your working Nodemailer transport configuration
-  const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false,
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // ✅ Mandatory for Port 465
   auth: {
-    user: process.env.BREVO_USER,
-    pass: process.env.BREVO_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASS
   }
 });
 
@@ -51,7 +48,7 @@ module.exports = (pool) => {
       console.log(`Generated OTP for ${email}: ${otp}`);
 
       const mailOptions = {
-        from: '"DineInnPro Support" <no-reply@dineinnpro.com>',
+        from: `"DineInnPro Support" <${process.env.GMAIL_USER}>`,
         to: email,
         subject: 'Your Password Reset OTP',
         html: `<p>Your OTP is: <strong>${otp}</strong>. It is valid for 5 minutes.</p>`,
