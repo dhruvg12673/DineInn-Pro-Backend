@@ -1,23 +1,19 @@
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false,
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // ✅ Mandatory for Port 465
   auth: {
-    user: process.env.BREVO_USER,
-    pass: process.env.BREVO_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASS
   }
 });
 
-
-
 const sendTokenEmail = async (toEmail, tokenNumber, ownerName, carNumber) => {
     const mailOptions = {
-        from: '"Your Valet Service" <dineinnpro@gmail.com>',
+        // Use your Gmail address here
+        from: `"Your Valet Service" <${process.env.GMAIL_USER}>`,
         to: toEmail,
         subject: `Your Valet Token: ${tokenNumber}`,
         html: `
