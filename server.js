@@ -20,9 +20,7 @@ const port = process.env.PORT || 5000;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production"
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: { rejectUnauthorized: false }, // Neon requires SSL for all connections
 });
 
 
@@ -33,7 +31,7 @@ pool.on('connect', (client) => {
 });
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://dineinpro.vercel.app', 'http://dineinpro.vercel.app', 'https://www.dineinnpro.com', 'https://dine-inn-pro.vercel.app'],
+  origin: ['http://localhost:3000', 'http://localhost:5000', 'https://dineinpro.vercel.app', 'http://dineinpro.vercel.app', 'https://www.dineinnpro.com', 'https://dine-inn-pro.vercel.app'],
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -94,7 +92,7 @@ app.post('/api/notify-waiter', async (req, res) => {
 
   try {
     const message = `Waiter call for Table: ${tableId} in Category: ${categoryId}`;
-    
+
     // ✅ FIX 1: Add "RETURNING *" to get the full database record back, including the new ID.
     const query = `
       INSERT INTO waiter_calls (restaurant_id, category_id, table_id, message)
@@ -102,10 +100,10 @@ app.post('/api/notify-waiter', async (req, res) => {
       RETURNING *; 
     `;
     const result = await pool.query(query, [restaurantId, categoryId, tableId, message]);
-    
+
     // ✅ FIX 2: The payload is now the complete record from the database.
     const newCallWithId = result.rows[0];
-    
+
     // ✅ FIX 3: Define the room and emit the notification after saving to the database.
     const roomName = `restaurant-${restaurantId}`;
     io.to(roomName).emit('waiter-call', newCallWithId);
@@ -115,8 +113,8 @@ app.post('/api/notify-waiter', async (req, res) => {
 
   } catch (err) {
     console.error('Error logging waiter call to DB:', err);
-    res.status(500).json({ 
-      message: 'Waiter call was sent, but failed to be logged in the database.' 
+    res.status(500).json({
+      message: 'Waiter call was sent, but failed to be logged in the database.'
     });
   }
 });
@@ -152,97 +150,97 @@ app.delete('/api/waiter-calls/:id', async (req, res) => {
   try {
     // The query now only deletes by the primary key 'id'.
     await pool.query('DELETE FROM waiter_calls WHERE id = $1', [id]);
-    
+
     // Send a 204 No Content response, which is standard for a successful delete.
     res.status(204).send();
 
   } catch (err) {
     console.error(`Error deleting waiter call with ID ${id}:`, err);
-    res.status(500).json({ error: 'Failed to delete notification.' });
-  }
+    res.status(500).json({ error: 'Failed to delete notification.' });
+  }
 });
 
 
 const getSafeDateRange = (range) => {
-    const now = new Date();
-    // Set time to midnight to ensure consistent date boundaries
-    now.setHours(0, 0, 0, 0);
+  const now = new Date();
+  // Set time to midnight to ensure consistent date boundaries
+  now.setHours(0, 0, 0, 0);
 
-    let startDate = new Date(now);
-    let endDate = new Date(now);
+  let startDate = new Date(now);
+  let endDate = new Date(now);
 
-    switch (range) {
-        case 'yesterday':
-            startDate.setDate(now.getDate() - 1);
-            endDate.setDate(now.getDate() - 1);
-            break;
-        case 'week':
-            // Correctly sets the start date to 6 days before today
-            startDate.setDate(now.getDate() - 6);
-            // End date remains today
-            break;
-        case 'month':
-            // Correctly sets the start date to 1 month before today
-            startDate.setMonth(now.getMonth() - 1);
-            // End date remains today
-            break;
-        case 'today':
-        default:
-            // No changes needed, start and end are both today
-            break;
-    }
+  switch (range) {
+    case 'yesterday':
+      startDate.setDate(now.getDate() - 1);
+      endDate.setDate(now.getDate() - 1);
+      break;
+    case 'week':
+      // Correctly sets the start date to 6 days before today
+      startDate.setDate(now.getDate() - 6);
+      // End date remains today
+      break;
+    case 'month':
+      // Correctly sets the start date to 1 month before today
+      startDate.setMonth(now.getMonth() - 1);
+      // End date remains today
+      break;
+    case 'today':
+    default:
+      // No changes needed, start and end are both today
+      break;
+  }
 
-    // Helper function to format dates into the 'YYYY-MM-DD' string format
-    // This is crucial for matching your database's date format.
-    const toYYYYMMDD = (date) => {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-    };
+  // Helper function to format dates into the 'YYYY-MM-DD' string format
+  // This is crucial for matching your database's date format.
+  const toYYYYMMDD = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
 
-    return {
-        startDate: toYYYYMMDD(startDate),
-        endDate: toYYYYMMDD(endDate)
-    };
+  return {
+    startDate: toYYYYMMDD(startDate),
+    endDate: toYYYYMMDD(endDate)
+  };
 };
 app.get('/api/dashboard/kpis', async (req, res) => {
-    const { restaurantId, range = 'today' } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { restaurantId, range = 'today' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
 
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-      const revenueResult = await pool.query(
-        `SELECT COALESCE(SUM(totalamount), 0) AS total FROM orders WHERE restaurantid = $1 AND DATE(orderdate) BETWEEN $2 AND $3`,
-        [restaurantId, startDate, endDate]
-      );
-      const expensesResult = await pool.query(
-        `SELECT COALESCE(SUM(totalpaid), 0) AS total FROM expenses WHERE restaurantid = $1 AND date BETWEEN $2 AND $3`,
-        [restaurantId, startDate, endDate]
-      );
+  try {
+    const revenueResult = await pool.query(
+      `SELECT COALESCE(SUM(totalamount), 0) AS total FROM orders WHERE restaurantid = $1 AND DATE(orderdate) BETWEEN $2 AND $3`,
+      [restaurantId, startDate, endDate]
+    );
+    const expensesResult = await pool.query(
+      `SELECT COALESCE(SUM(totalpaid), 0) AS total FROM expenses WHERE restaurantid = $1 AND date BETWEEN $2 AND $3`,
+      [restaurantId, startDate, endDate]
+    );
 
-      const revenue = parseFloat(revenueResult.rows[0].total);
-      const expenses = parseFloat(expensesResult.rows[0].total);
+    const revenue = parseFloat(revenueResult.rows[0].total);
+    const expenses = parseFloat(expensesResult.rows[0].total);
 
-      res.json({
-        revenue,
-        expenses,
-        netProfit: revenue - expenses,
-      });
-    } catch (err) {
-      console.error('Error fetching KPI data:', err);
-      res.status(500).json({ error: 'Server error' });
-    }
+    res.json({
+      revenue,
+      expenses,
+      netProfit: revenue - expenses,
+    });
+  } catch (err) {
+    console.error('Error fetching KPI data:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/dashboard/sales-vs-expenses', async (req, res) => {
-    const { restaurantId, range = 'week' } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { restaurantId, range = 'week' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-        const query = `
+  try {
+    const query = `
             WITH daily_sales AS (
                 SELECT DATE_TRUNC('day', orderdate)::date AS day, SUM(totalamount) AS sales
                 FROM orders
@@ -263,25 +261,25 @@ app.get('/api/dashboard/sales-vs-expenses', async (req, res) => {
             FULL OUTER JOIN daily_expenses de ON ds.day = de.day
             ORDER BY COALESCE(ds.day, de.day);
         `;
-        const result = await pool.query(query, [restaurantId, startDate, endDate]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching sales vs expenses data:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+    const result = await pool.query(query, [restaurantId, startDate, endDate]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching sales vs expenses data:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/dashboard/top-dishes', async (req, res) => {
-    const { restaurantId } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    
-    // Use the last month for a good sample size
-    const { startDate, endDate } = getSafeDateRange('month');
-    
-    try {
-        // This query now correctly JOINS orders and order_details
-        // and uses the 'orderdate' column from the 'orders' table.
-        const result = await pool.query(`
+  const { restaurantId } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+
+  // Use the last month for a good sample size
+  const { startDate, endDate } = getSafeDateRange('month');
+
+  try {
+    // This query now correctly JOINS orders and order_details
+    // and uses the 'orderdate' column from the 'orders' table.
+    const result = await pool.query(`
             SELECT
                 od.item_name AS name,
                 SUM(od.quantity)::integer AS value
@@ -297,12 +295,12 @@ app.get('/api/dashboard/top-dishes', async (req, res) => {
                 value DESC
             LIMIT 5;
         `, [restaurantId, startDate, endDate]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching top dishes:', err);
-        res.status(500).json({ error: 'Server error fetching top dishes' });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching top dishes:', err);
+    res.status(500).json({ error: 'Server error fetching top dishes' });
+  }
 });
 
 // In server.js, replace the existing peak-order-times route with this one:
@@ -317,70 +315,70 @@ app.get('/api/dashboard/top-dishes', async (req, res) => {
 // In server.js
 
 app.get('/api/dashboard/staff-attendance', async (req, res) => {
-    const { restaurantId, range = 'today' } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { restaurantId, range = 'today' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
 
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-        // 1. Get the total number of staff for the restaurant.
-        const totalStaffResult = await pool.query(
-            'SELECT COUNT(*) as total FROM staff WHERE restaurantid = $1',
-            [restaurantId]
-        );
-        const totalStaff = parseInt(totalStaffResult.rows[0].total, 10);
+  try {
+    // 1. Get the total number of staff for the restaurant.
+    const totalStaffResult = await pool.query(
+      'SELECT COUNT(*) as total FROM staff WHERE restaurantid = $1',
+      [restaurantId]
+    );
+    const totalStaff = parseInt(totalStaffResult.rows[0].total, 10);
 
-        if (totalStaff === 0) {
-            return res.json([
-                { name: 'Present', value: 0, color: '#4CAF50' },
-                { name: 'Absent', value: 0, color: '#F44336' },
-            ]);
-        }
+    if (totalStaff === 0) {
+      return res.json([
+        { name: 'Present', value: 0, color: '#4CAF50' },
+        { name: 'Absent', value: 0, color: '#F44336' },
+      ]);
+    }
 
-        // 2. Calculate the number of days in the selected date range.
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        // Add 1 to include both the start and end day in the count.
-        const dayCount = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    // 2. Calculate the number of days in the selected date range.
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    // Add 1 to include both the start and end day in the count.
+    const dayCount = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-        // 3. Calculate the total possible "attendance slots" for the period.
-        // (e.g., 10 staff * 7 days = 70 possible slots)
-        const totalPossibleSlots = totalStaff * dayCount;
+    // 3. Calculate the total possible "attendance slots" for the period.
+    // (e.g., 10 staff * 7 days = 70 possible slots)
+    const totalPossibleSlots = totalStaff * dayCount;
 
-        // 4. Count the total actual check-ins that occurred within the date range.
-        const totalCheckInsResult = await pool.query(
-            `SELECT COUNT(*) AS total_check_ins
+    // 4. Count the total actual check-ins that occurred within the date range.
+    const totalCheckInsResult = await pool.query(
+      `SELECT COUNT(*) AS total_check_ins
              FROM attendance
              WHERE DATE(attendancedate) BETWEEN $1 AND $2
                AND staffid IN (SELECT id FROM staff WHERE restaurantid = $3)`,
-            [startDate, endDate, restaurantId]
-        );
-        const totalCheckIns = parseInt(totalCheckInsResult.rows[0].total_check_ins || 0, 10);
+      [startDate, endDate, restaurantId]
+    );
+    const totalCheckIns = parseInt(totalCheckInsResult.rows[0].total_check_ins || 0, 10);
 
-        // 5. The number of absent slots is the remainder.
-        const totalAbsentSlots = totalPossibleSlots - totalCheckIns;
+    // 5. The number of absent slots is the remainder.
+    const totalAbsentSlots = totalPossibleSlots - totalCheckIns;
 
-        res.json([
-            { name: 'Present', value: totalCheckIns, color: '#4CAF50' },
-            // Ensure the value isn't negative in case of data inconsistencies.
-            { name: 'Absent', value: Math.max(0, totalAbsentSlots), color: '#F44336' },
-        ]);
-    } catch (err) {
-        console.error('Error fetching staff attendance:', err);
-        res.status(500).json({ error: 'Server error while fetching staff attendance' });
-    }
+    res.json([
+      { name: 'Present', value: totalCheckIns, color: '#4CAF50' },
+      // Ensure the value isn't negative in case of data inconsistencies.
+      { name: 'Absent', value: Math.max(0, totalAbsentSlots), color: '#F44336' },
+    ]);
+  } catch (err) {
+    console.error('Error fetching staff attendance:', err);
+    res.status(500).json({ error: 'Server error while fetching staff attendance' });
+  }
 });
 
 // ✅ CORRECTED: Peak Order Times Route
 app.get('/api/dashboard/peak-order-times', async (req, res) => {
-    const { restaurantId, range = 'today' } = req.query; // Now respects the date range
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { restaurantId, range = 'today' } = req.query; // Now respects the date range
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
 
-    // This now correctly uses the selected date range
-    const { startDate, endDate } = getSafeDateRange(range);
+  // This now correctly uses the selected date range
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-        const result = await pool.query(`
+  try {
+    const result = await pool.query(`
             SELECT to_char(orderdate, 'HH24') AS hour, COUNT(id) AS orders
             FROM orders
             WHERE restaurantid = $1 AND DATE(orderdate) BETWEEN $2 AND $3
@@ -388,27 +386,27 @@ app.get('/api/dashboard/peak-order-times', async (req, res) => {
             ORDER BY hour;
         `, [restaurantId, startDate, endDate]); // Correctly passes all parameters
 
-        const formattedData = result.rows.map(row => ({
-            hour: `${parseInt(row.hour, 10)}:00`,
-            orders: parseInt(row.orders, 10)
-        }));
-        res.json(formattedData);
-    } catch (err) {
-        console.error('Error fetching peak order times:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+    const formattedData = result.rows.map(row => ({
+      hour: `${parseInt(row.hour, 10)}:00`,
+      orders: parseInt(row.orders, 10)
+    }));
+    res.json(formattedData);
+  } catch (err) {
+    console.error('Error fetching peak order times:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 // In server.js
 // In server.js, add these new routes
 
 // --- New vs. Returning Customers ---
 app.get('/api/dashboard/customer-type', async (req, res) => {
-    const { restaurantId, range = 'month' } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { restaurantId, range = 'month' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-        const query = `
+  try {
+    const query = `
             WITH customer_orders AS (
                 SELECT 
                     customerno, 
@@ -424,16 +422,16 @@ app.get('/api/dashboard/customer-type', async (req, res) => {
             JOIN orders o ON co.customerno = o.customerno
             WHERE o.restaurantid = $1 AND DATE(o.orderdate) BETWEEN $2 AND $3;
         `;
-        const result = await pool.query(query, [restaurantId, startDate, endDate]);
-        const { new_customers, returning_customers } = result.rows[0];
-        res.json([
-            { name: 'New', value: parseInt(new_customers || 0) },
-            { name: 'Returning', value: parseInt(returning_customers || 0) }
-        ]);
-    } catch (err) {
-        console.error('Error fetching customer types:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+    const result = await pool.query(query, [restaurantId, startDate, endDate]);
+    const { new_customers, returning_customers } = result.rows[0];
+    res.json([
+      { name: 'New', value: parseInt(new_customers || 0) },
+      { name: 'Returning', value: parseInt(returning_customers || 0) }
+    ]);
+  } catch (err) {
+    console.error('Error fetching customer types:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // --- Average Order Value (AOV) ---
@@ -441,14 +439,14 @@ app.get('/api/dashboard/customer-type', async (req, res) => {
 
 // --- Average Order Value (AOV) ---
 app.get('/api/dashboard/aov', async (req, res) => {
-    const { restaurantId, range = 'week' } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { restaurantId, range = 'week' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-        // This query is corrected to group by the same date expression
-        // that is being selected, which resolves the SQL error.
-        const result = await pool.query(`
+  try {
+    // This query is corrected to group by the same date expression
+    // that is being selected, which resolves the SQL error.
+    const result = await pool.query(`
             SELECT 
                 to_char(DATE(orderdate), 'Mon DD') as date,
                 AVG(totalamount)::integer as value
@@ -457,20 +455,20 @@ app.get('/api/dashboard/aov', async (req, res) => {
             GROUP BY DATE(orderdate)
             ORDER BY DATE(orderdate);
         `, [restaurantId, startDate, endDate]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching AOV:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching AOV:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 // --- Top Spenders ---
 app.get('/api/dashboard/top-spenders', async (req, res) => {
-    const { restaurantId, range = 'month' } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { restaurantId, range = 'month' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-        const result = await pool.query(`
+  try {
+    const result = await pool.query(`
             SELECT 
                 customername as name, 
                 SUM(totalamount)::integer as total
@@ -480,21 +478,21 @@ app.get('/api/dashboard/top-spenders', async (req, res) => {
             ORDER BY total DESC
             LIMIT 5;
         `, [restaurantId, startDate, endDate]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching top spenders:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching top spenders:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // --- Popular Menu Categories ---
 app.get('/api/dashboard/popular-categories', async (req, res) => {
-    const { restaurantId, range = 'month' } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { restaurantId, range = 'month' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-        const result = await pool.query(`
+  try {
+    const result = await pool.query(`
             SELECT 
                 mi.category as name, 
                 SUM(od.quantity)::integer as orders
@@ -505,22 +503,22 @@ app.get('/api/dashboard/popular-categories', async (req, res) => {
             GROUP BY mi.category
             ORDER BY orders DESC;
         `, [restaurantId, startDate, endDate]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching popular categories:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching popular categories:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/dashboard/most-tipped-staff', async (req, res) => {
-    const { restaurantId, range = 'month' } = req.query;
-    if (!restaurantId) {
-        return res.status(400).json({ error: 'restaurantId is required' });
-    }
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { restaurantId, range = 'month' } = req.query;
+  if (!restaurantId) {
+    return res.status(400).json({ error: 'restaurantId is required' });
+  }
+  const { startDate, endDate } = getSafeDateRange(range);
 
-    try {
-        const query = `
+  try {
+    const query = `
             SELECT 
                 s.fullname AS name, 
                 SUM(t.amount)::integer AS tips
@@ -536,22 +534,22 @@ app.get('/api/dashboard/most-tipped-staff', async (req, res) => {
                 tips DESC
             LIMIT 5;
         `;
-        const result = await pool.query(query, [restaurantId, startDate, endDate]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching most tipped staff:', err);
-        res.status(500).json({ error: 'Server error fetching most tipped staff' });
-    }
+    const result = await pool.query(query, [restaurantId, startDate, endDate]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching most tipped staff:', err);
+    res.status(500).json({ error: 'Server error fetching most tipped staff' });
+  }
 });
 
 app.get('/api/dashboard/inventory-levels', async (req, res) => {
-    const { restaurantId } = req.query;
-    if (!restaurantId) {
-        return res.status(400).json({ error: 'restaurantId is required' });
-    }
+  const { restaurantId } = req.query;
+  if (!restaurantId) {
+    return res.status(400).json({ error: 'restaurantId is required' });
+  }
 
-    try {
-        const query = `
+  try {
+    const query = `
             SELECT 
                 item, 
                 quantity
@@ -563,47 +561,47 @@ app.get('/api/dashboard/inventory-levels', async (req, res) => {
                 quantity DESC
             LIMIT 5;
         `;
-        const result = await pool.query(query, [restaurantId]);
-        
-        // Format the data for the Recharts BarChart component
-        const formattedData = result.rows.map(row => ({
-            name: row.item,
-            stock: row.quantity 
-        }));
-        
-        res.json(formattedData);
-    } catch (err) {
-        console.error('Error fetching inventory levels:', err);
-        res.status(500).json({ error: 'Server error fetching inventory levels' });
-    }
+    const result = await pool.query(query, [restaurantId]);
+
+    // Format the data for the Recharts BarChart component
+    const formattedData = result.rows.map(row => ({
+      name: row.item,
+      stock: row.quantity
+    }));
+
+    res.json(formattedData);
+  } catch (err) {
+    console.error('Error fetching inventory levels:', err);
+    res.status(500).json({ error: 'Server error fetching inventory levels' });
+  }
 });
 
 // --- Low Stock Alerts ---
 app.get('/api/dashboard/low-stock-alerts', async (req, res) => {
-    const { restaurantId } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { restaurantId } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
 
-    try {
-        const result = await pool.query(`
+  try {
+    const result = await pool.query(`
             SELECT item, quantity, unit, threshold 
             FROM inventory 
             WHERE restaurantid = $1 AND quantity < threshold 
             ORDER BY item;
         `, [restaurantId]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching low stock alerts:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching low stock alerts:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 app.get('/api/dashboard/daily-profit', async (req, res) => {
-    const { restaurantId, range = 'week' } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    
-    const { startDate, endDate } = getSafeDateRange(range);
+  const { restaurantId, range = 'week' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
 
-    try {
-        const query = `
+  const { startDate, endDate } = getSafeDateRange(range);
+
+  try {
+    const query = `
             WITH daily_sales AS (
                 SELECT 
                     DATE_TRUNC('day', orderdate)::date AS day, 
@@ -627,26 +625,26 @@ app.get('/api/dashboard/daily-profit', async (req, res) => {
             FULL OUTER JOIN daily_expenses de ON ds.day = de.day
             ORDER BY COALESCE(ds.day, de.day);
         `;
-        const result = await pool.query(query, [restaurantId, startDate, endDate]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching daily profit data:', err);
-        res.status(500).json({ error: 'Server error fetching daily profit data' });
-    }
+    const result = await pool.query(query, [restaurantId, startDate, endDate]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching daily profit data:', err);
+    res.status(500).json({ error: 'Server error fetching daily profit data' });
+  }
 });
 
 // ... (the rest of your server.js file)
 
 // ... (the rest of your server.js file)
 app.get('/api/dashboard/feedback-sentiment', async (req, res) => {
-    const { restaurantId } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    
-    // We'll analyze feedback from the last 30 days
-    const { startDate, endDate } = getSafeDateRange('month');
-    
-    try {
-        const result = await pool.query(`
+  const { restaurantId } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+
+  // We'll analyze feedback from the last 30 days
+  const { startDate, endDate } = getSafeDateRange('month');
+
+  try {
+    const result = await pool.query(`
             SELECT 
                 SUM(CASE WHEN would_recommend = 'yes' THEN 1 ELSE 0 END) AS positive,
                 SUM(CASE WHEN would_recommend = 'maybe' THEN 1 ELSE 0 END) AS neutral,
@@ -655,64 +653,64 @@ app.get('/api/dashboard/feedback-sentiment', async (req, res) => {
             WHERE restaurantid = $1 AND DATE(timestamp) BETWEEN $2 AND $3;
         `, [restaurantId, startDate, endDate]);
 
-        const { positive, neutral, negative } = result.rows[0];
-        
-        res.json([
-            { name: 'Positive', value: parseInt(positive || 0, 10), color: '#4CAF50' },
-            { name: 'Neutral', value: parseInt(neutral || 0, 10), color: '#FF9800' },
-            { name: 'Negative', value: parseInt(negative || 0, 10), color: '#F44336' }
-        ]);
-    } catch (err) {
-        console.error('Error fetching feedback sentiment:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
+    const { positive, neutral, negative } = result.rows[0];
+
+    res.json([
+      { name: 'Positive', value: parseInt(positive || 0, 10), color: '#4CAF50' },
+      { name: 'Neutral', value: parseInt(neutral || 0, 10), color: '#FF9800' },
+      { name: 'Negative', value: parseInt(negative || 0, 10), color: '#F44336' }
+    ]);
+  } catch (err) {
+    console.error('Error fetching feedback sentiment:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.get('/api/dashboard/revenue-by-source', async(req, res) => {
-      const { restaurantId, range = 'week' } = req.query;
-      if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-      const { startDate, endDate } = getSafeDateRange(range);
-      try {
-          const result = await pool.query(`
+app.get('/api/dashboard/revenue-by-source', async (req, res) => {
+  const { restaurantId, range = 'week' } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { startDate, endDate } = getSafeDateRange(range);
+  try {
+    const result = await pool.query(`
             SELECT deliverytype AS name, SUM(totalamount)::integer AS value
             FROM orders
             WHERE restaurantid = $1 AND DATE(orderdate) BETWEEN $2 AND $3
             GROUP BY deliverytype;
           `, [restaurantId, startDate, endDate]);
 
-          const colors = { 'Dine-in': '#2196F3', 'Delivery': '#FF9800', 'Takeaway': '#4CAF50' };
-          const formattedData = result.rows.map(row => ({...row, color: colors[row.name] || '#8884d8' }));
+    const colors = { 'Dine-in': '#2196F3', 'Delivery': '#FF9800', 'Takeaway': '#4CAF50' };
+    const formattedData = result.rows.map(row => ({ ...row, color: colors[row.name] || '#8884d8' }));
 
-          res.json(formattedData);
-      } catch(err) {
-          console.error('Error fetching revenue by source:', err);
-          res.status(500).json({ error: 'Server Error' });
-      }
+    res.json(formattedData);
+  } catch (err) {
+    console.error('Error fetching revenue by source:', err);
+    res.status(500).json({ error: 'Server Error' });
+  }
 });
 
-app.get('/api/dashboard/order-status-funnel', async(req, res) => {
-    const { restaurantId } = req.query;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    const { startDate, endDate } = getSafeDateRange('today');
-    try {
-        const query = `
+app.get('/api/dashboard/order-status-funnel', async (req, res) => {
+  const { restaurantId } = req.query;
+  if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+  const { startDate, endDate } = getSafeDateRange('today');
+  try {
+    const query = `
             SELECT status, COUNT(id)::integer as value
             FROM orders
             WHERE restaurantid = $1 AND DATE(orderdate) BETWEEN $2 AND $3
             GROUP BY status;
         `;
-        const result = await pool.query(query, [restaurantId, startDate, endDate]);
-        const fills = { 'pending': '#8884d8', 'accepted': '#83a6ed', 'served': '#82ca9d', 'paid': '#a4de6c' };
-        const formattedData = result.rows.map(row => ({
-            name: row.status.charAt(0).toUpperCase() + row.status.slice(1),
-            value: row.value,
-            fill: fills[row.status] || '#8dd1e1'
-        }));
-        res.json(formattedData);
-    } catch(err) {
-        console.error('Error fetching order status funnel:', err);
-        res.status(500).json({ error: 'Server Error' });
-    }
+    const result = await pool.query(query, [restaurantId, startDate, endDate]);
+    const fills = { 'pending': '#8884d8', 'accepted': '#83a6ed', 'served': '#82ca9d', 'paid': '#a4de6c' };
+    const formattedData = result.rows.map(row => ({
+      name: row.status.charAt(0).toUpperCase() + row.status.slice(1),
+      value: row.value,
+      fill: fills[row.status] || '#8dd1e1'
+    }));
+    res.json(formattedData);
+  } catch (err) {
+    console.error('Error fetching order status funnel:', err);
+    res.status(500).json({ error: 'Server Error' });
+  }
 });
 // ========== RESTAURANT ACCESS MANAGEMENT (NEW) ==========
 
@@ -729,123 +727,123 @@ app.get('/api/restaurants', async (req, res) => {
 
 // POST a new restaurant and its admin user
 app.post('/api/restaurants', async (req, res) => {
-    const {
-        restaurantId,
-        restaurantName,
-        adminEmail,
-        password,
-        startDate,
-        expiryDate,
-        status,
-        plan
-    } = req.body;
+  const {
+    restaurantId,
+    restaurantName,
+    adminEmail,
+    password,
+    startDate,
+    expiryDate,
+    status,
+    plan
+  } = req.body;
 
-    if (!restaurantId || !restaurantName || !adminEmail || !password || !startDate || !expiryDate || !status || !plan) {
-        return res.status(400).json({ error: 'All fields are required to create a restaurant.' });
-    }
+  if (!restaurantId || !restaurantName || !adminEmail || !password || !startDate || !expiryDate || !status || !plan) {
+    return res.status(400).json({ error: 'All fields are required to create a restaurant.' });
+  }
 
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-        // Insert into restaurants table
-        const restaurantQuery = `
+    // Insert into restaurants table
+    const restaurantQuery = `
             INSERT INTO restaurants (id, name, admin_email, start_date, expiry_date, status, plan)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
         `;
-        const restaurantValues = [restaurantId, restaurantName, adminEmail, startDate, expiryDate, status, plan];
-        const restaurantResult = await client.query(restaurantQuery, restaurantValues);
-        const newRestaurant = restaurantResult.rows[0];
+    const restaurantValues = [restaurantId, restaurantName, adminEmail, startDate, expiryDate, status, plan];
+    const restaurantResult = await client.query(restaurantQuery, restaurantValues);
+    const newRestaurant = restaurantResult.rows[0];
 
-        // Hash password and insert admin user credentials
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-        const userQuery = `
+    // Hash password and insert admin user credentials
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    const userQuery = `
             INSERT INTO usercredentials (restaurantid, email, password, role)
             VALUES ($1, $2, $3, $4)
         `;
-        await client.query(userQuery, [restaurantId, adminEmail, hashedPassword, 'admin']);
+    await client.query(userQuery, [restaurantId, adminEmail, hashedPassword, 'admin']);
 
-        await client.query('COMMIT');
-        res.status(201).json(newRestaurant);
+    await client.query('COMMIT');
+    res.status(201).json(newRestaurant);
 
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error('Error creating restaurant:', err);
-        if (err.code === '23505') { // unique_violation
-            return res.status(409).json({ error: 'Restaurant ID or Admin Email already exists.' });
-        }
-        res.status(500).json({ error: 'Server error during restaurant creation.' });
-    } finally {
-        client.release();
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error creating restaurant:', err);
+    if (err.code === '23505') { // unique_violation
+      return res.status(409).json({ error: 'Restaurant ID or Admin Email already exists.' });
     }
+    res.status(500).json({ error: 'Server error during restaurant creation.' });
+  } finally {
+    client.release();
+  }
 });
 
 // PUT (update) a restaurant's details. This can be used for suspension.
 app.put('/api/restaurants/:id', async (req, res) => {
-    const { id } = req.params;
-    // Note: In a real app, you would destructure only the fields you want to update.
-    const { name, admin_email, start_date, expiry_date, status, plan } = req.body;
+  const { id } = req.params;
+  // Note: In a real app, you would destructure only the fields you want to update.
+  const { name, admin_email, start_date, expiry_date, status, plan } = req.body;
 
-    try {
-        const result = await pool.query(
-            `UPDATE restaurants SET
+  try {
+    const result = await pool.query(
+      `UPDATE restaurants SET
                 name = $1, admin_email = $2, start_date = $3,
                 expiry_date = $4, status = $5, plan = $6
             WHERE id = $7 RETURNING *`,
-            [name, admin_email, start_date, expiry_date, status, plan, id]
-        );
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Restaurant not found.' });
-        }
-        res.json(result.rows[0]);
-    } catch (err) {
-        console.error(`Error updating restaurant ${id}:`, err);
-        res.status(500).json({ error: 'Server error.' });
+      [name, admin_email, start_date, expiry_date, status, plan, id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Restaurant not found.' });
     }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(`Error updating restaurant ${id}:`, err);
+    res.status(500).json({ error: 'Server error.' });
+  }
 });
 
 
 // DELETE (Hard Delete) a restaurant and its credentials
 app.delete('/api/restaurants/:id', async (req, res) => {
-    const { id } = req.params;
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-        // First, get the admin email from the restaurant record to delete the corresponding user.
-        const restaurantRes = await client.query('SELECT admin_email FROM restaurants WHERE id = $1', [id]);
-        
-        if (restaurantRes.rowCount > 0) {
-            const { admin_email } = restaurantRes.rows[0];
-            // Delete the user from usercredentials table
-            if (admin_email) {
-                await client.query('DELETE FROM usercredentials WHERE email = $1 AND restaurantid = $2', [admin_email, id]);
-            }
-        } else {
-             // If the restaurant doesn't exist, we can just inform the user.
-            return res.status(404).json({ error: 'Restaurant not found.' });
-        }
-        
-        // Finally, delete the restaurant from the restaurants table
-        const deleteRestaurantResult = await client.query('DELETE FROM restaurants WHERE id = $1', [id]);
-        
-        if (deleteRestaurantResult.rowCount === 0) {
-            // This case should theoretically not be hit if the first select works, but it's good practice.
-            throw new Error('Restaurant was found but could not be deleted.');
-        }
+    // First, get the admin email from the restaurant record to delete the corresponding user.
+    const restaurantRes = await client.query('SELECT admin_email FROM restaurants WHERE id = $1', [id]);
 
-        await client.query('COMMIT');
-        res.status(200).json({ message: 'Restaurant and associated credentials permanently deleted successfully.' });
-
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(`Error deleting restaurant ${id}:`, err);
-        res.status(500).json({ error: 'Server error during deletion.' });
-    } finally {
-        client.release();
+    if (restaurantRes.rowCount > 0) {
+      const { admin_email } = restaurantRes.rows[0];
+      // Delete the user from usercredentials table
+      if (admin_email) {
+        await client.query('DELETE FROM usercredentials WHERE email = $1 AND restaurantid = $2', [admin_email, id]);
+      }
+    } else {
+      // If the restaurant doesn't exist, we can just inform the user.
+      return res.status(404).json({ error: 'Restaurant not found.' });
     }
+
+    // Finally, delete the restaurant from the restaurants table
+    const deleteRestaurantResult = await client.query('DELETE FROM restaurants WHERE id = $1', [id]);
+
+    if (deleteRestaurantResult.rowCount === 0) {
+      // This case should theoretically not be hit if the first select works, but it's good practice.
+      throw new Error('Restaurant was found but could not be deleted.');
+    }
+
+    await client.query('COMMIT');
+    res.status(200).json({ message: 'Restaurant and associated credentials permanently deleted successfully.' });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(`Error deleting restaurant ${id}:`, err);
+    res.status(500).json({ error: 'Server error during deletion.' });
+  } finally {
+    client.release();
+  }
 });
 
 
@@ -879,17 +877,17 @@ app.post('/api/login', async (req, res) => {
 
     // 2. Check if expired and update status to 'On-Hold' if it's not already
     if (expiryDate < today && restaurant.status !== 'On-Hold') {
-       await pool.query(
-         "UPDATE restaurants SET status = 'On-Hold' WHERE id = $1",
-         [restaurantId]
-       );
-       // After updating, block the login.
-       return res.status(403).json({ error: "This restaurant's subscription has expired. Access is on hold." });
+      await pool.query(
+        "UPDATE restaurants SET status = 'On-Hold' WHERE id = $1",
+        [restaurantId]
+      );
+      // After updating, block the login.
+      return res.status(403).json({ error: "This restaurant's subscription has expired. Access is on hold." });
     }
 
     // 3. If status is already On-Hold or Suspended, block login
     if (restaurant.status === 'On-Hold' || restaurant.status === 'Suspended') {
-        return res.status(403).json({ error: `This restaurant's access is ${restaurant.status}. Please contact support.` });
+      return res.status(403).json({ error: `This restaurant's access is ${restaurant.status}. Please contact support.` });
     }
 
     // 4. If restaurant is active, proceed with user authentication
@@ -908,7 +906,7 @@ app.post('/api/login', async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
+
     // 5. Login successful
     const { id, restaurantid, email: userEmail, role } = user;
     res.json({ user: { id, restaurantid, email: userEmail, role } });
@@ -1129,46 +1127,46 @@ app.delete('/api/tables/:id', async (req, res) => {
 // ========== MENUITEMS ==========
 
 app.get('/api/menu-item-categories', async (req, res) => {
-    const { restaurantId } = req.query;
-    if (!restaurantId) {
-        return res.status(400).json({ error: 'restaurantId is required' });
-    }
-    try {
-        const result = await pool.query(
-            'SELECT DISTINCT category FROM menuitems WHERE restaurantid = $1 AND category IS NOT NULL AND category <> \'\' ORDER BY category ASC',
-            [restaurantId]
-        );
-        // Transform the array of objects into an array of strings
-        const categories = result.rows.map(row => row.category);
-        res.json(categories);
-    } catch (err) {
-        console.error('Error fetching menu item categories:', err);
-        res.status(500).json({ error: 'Failed to fetch menu item categories' });
-    }
+  const { restaurantId } = req.query;
+  if (!restaurantId) {
+    return res.status(400).json({ error: 'restaurantId is required' });
+  }
+  try {
+    const result = await pool.query(
+      'SELECT DISTINCT category FROM menuitems WHERE restaurantid = $1 AND category IS NOT NULL AND category <> \'\' ORDER BY category ASC',
+      [restaurantId]
+    );
+    // Transform the array of objects into an array of strings
+    const categories = result.rows.map(row => row.category);
+    res.json(categories);
+  } catch (err) {
+    console.error('Error fetching menu item categories:', err);
+    res.status(500).json({ error: 'Failed to fetch menu item categories' });
+  }
 });
 
 // "Delete" a menu category by re-assigning items to 'Uncategorized'
 app.delete('/api/menu-item-categories', async (req, res) => {
-    const { restaurantId, categoryName } = req.body;
-    if (!restaurantId || !categoryName) {
-        return res.status(400).json({ error: 'restaurantId and categoryName are required.' });
-    }
-    if (categoryName === 'Uncategorized') {
-        return res.status(400).json({ error: 'Cannot delete the "Uncategorized" category.' });
-    }
+  const { restaurantId, categoryName } = req.body;
+  if (!restaurantId || !categoryName) {
+    return res.status(400).json({ error: 'restaurantId and categoryName are required.' });
+  }
+  if (categoryName === 'Uncategorized') {
+    return res.status(400).json({ error: 'Cannot delete the "Uncategorized" category.' });
+  }
 
-    try {
-        const result = await pool.query(
-            `UPDATE menuitems 
+  try {
+    const result = await pool.query(
+      `UPDATE menuitems 
              SET category = 'Uncategorized' 
              WHERE restaurantid = $1 AND category = $2`,
-            [restaurantId, categoryName]
-        );
-        res.status(200).json({ message: `Category '${categoryName}' removed. ${result.rowCount} items were moved to Uncategorized.` });
-    } catch (error) {
-        console.error('Error "deleting" menu category:', error);
-        res.status(500).json({ error: 'Failed to remove menu category' });
-    }
+      [restaurantId, categoryName]
+    );
+    res.status(200).json({ message: `Category '${categoryName}' removed. ${result.rowCount} items were moved to Uncategorized.` });
+  } catch (error) {
+    console.error('Error "deleting" menu category:', error);
+    res.status(500).json({ error: 'Failed to remove menu category' });
+  }
 });
 //ORDERS LIST
 // server.js
@@ -1223,7 +1221,7 @@ app.put('/api/orders/:id', async (req, res) => {
 
   // A whitelist of columns that are allowed to be edited from this page.
   const allowedFields = [
-    'customername', 'customerno', 'deliverytype', 'paymenttype', 
+    'customername', 'customerno', 'deliverytype', 'paymenttype',
     'totalamount', 'orderdate', 'ispaid', 'email_id', 'tablenumber', 'status'
   ];
 
@@ -1290,9 +1288,9 @@ app.get('/api/menuitems-grouped', async (req, res) => {
       const category = row.category || 'Uncategorized';
       if (!grouped[category]) {
         grouped[category] = {
-            category: category,
-            isOpen: true,
-            items: []
+          category: category,
+          isOpen: true,
+          items: []
         };
       }
       // The push logic includes the new is_available flag
@@ -1308,7 +1306,7 @@ app.get('/api/menuitems-grouped', async (req, res) => {
         is_available: row.is_available
       });
     });
-    
+
     const output = Object.values(grouped);
     res.json(output);
 
@@ -1383,7 +1381,7 @@ app.post('/api/menuitems', async (req, res) => {
     res.status(500).json({ error: 'Error adding menu item' });
   }
 });
- 
+
 // PUT (update) an existing menu item
 app.put('/api/menuitems/:id', async (req, res) => {
   const { id } = req.params;
@@ -1418,7 +1416,7 @@ app.put('/api/menuitems/:id', async (req, res) => {
     );
 
     if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'Menu item not found or you do not have permission to edit it.' });
+      return res.status(404).json({ error: 'Menu item not found or you do not have permission to edit it.' });
     }
 
     res.json(result.rows[0]);
@@ -1434,15 +1432,15 @@ app.delete('/api/menuitems/:id', async (req, res) => {
   try {
     // Instead of deleting, we update the is_available flag to false.
     const result = await pool.query(
-      'UPDATE menuitems SET is_available = false WHERE id = $1 RETURNING *', 
+      'UPDATE menuitems SET is_available = false WHERE id = $1 RETURNING *',
       [id]
     );
 
     if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'Menu item not found.' });
+      return res.status(404).json({ error: 'Menu item not found.' });
     }
     // 204 No Content is still appropriate as the item is effectively "gone" from the active menu.
-    res.status(204).send(); 
+    res.status(204).send();
   } catch (err) {
     console.error('DELETE /menuitems error:', err.message);
     // The foreign key error will no longer happen, but we keep this for other potential errors.
@@ -1466,7 +1464,7 @@ app.delete('/api/polls/:id', async (req, res) => {
 
     // First, delete all options associated with the poll to maintain data integrity
     await client.query('DELETE FROM polloptions WHERE pollid = $1', [id]);
-    
+
     // Then, delete the poll itself from the polls table
     const result = await client.query('DELETE FROM polls WHERE id = $1', [id]);
 
@@ -1966,7 +1964,7 @@ app.post('/api/orders', async (req, res) => {
       const existingOrder = existingOrderRes.rows[0];
       orderId = existingOrder.id;
       billNo = existingOrder.billno;
-      
+
       const newTotalAmount = parseFloat(existingOrder.totalamount) + totalamount;
 
       await client.query(
@@ -1975,26 +1973,26 @@ app.post('/api/orders', async (req, res) => {
       );
 
       for (const item of orderitems) {
-          const { menuid, itemname, quantity, price } = item;
-          const existingItemRes = await client.query(
-              `SELECT id, quantity FROM order_details WHERE order_id = $1 AND menu_item_id = $2`,
-              [orderId, menuid]
-          );
+        const { menuid, itemname, quantity, price } = item;
+        const existingItemRes = await client.query(
+          `SELECT id, quantity FROM order_details WHERE order_id = $1 AND menu_item_id = $2`,
+          [orderId, menuid]
+        );
 
-          if (existingItemRes.rowCount > 0) {
-              const existingItem = existingItemRes.rows[0];
-              const newTotalQuantity = existingItem.quantity + quantity;
-              await client.query(
-                  `UPDATE order_details SET quantity = $1 WHERE id = $2`,
-                  [newTotalQuantity, existingItem.id]
-              );
-          } else {
-              await client.query(
-                  `INSERT INTO order_details (order_id, restaurantid, billno, menu_item_id, quantity, price_at_order, item_name, quantity_served)
+        if (existingItemRes.rowCount > 0) {
+          const existingItem = existingItemRes.rows[0];
+          const newTotalQuantity = existingItem.quantity + quantity;
+          await client.query(
+            `UPDATE order_details SET quantity = $1 WHERE id = $2`,
+            [newTotalQuantity, existingItem.id]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO order_details (order_id, restaurantid, billno, menu_item_id, quantity, price_at_order, item_name, quantity_served)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, 0)`,
-                  [orderId, parsedRestaurantId, billNo, menuid, quantity, price, itemname]
-              );
-          }
+            [orderId, parsedRestaurantId, billNo, menuid, quantity, price, itemname]
+          );
+        }
       }
 
     } else {
@@ -2007,43 +2005,43 @@ app.post('/api/orders', async (req, res) => {
       const orderResult = await client.query(orderInsertQuery, [
         parsedRestaurantId, customername, customerno, email_id, deliverytype, paymenttype, totalamount, isoptedin, ispaid, tablenumber, categoryid, staff_id
       ]);
-      
+
       orderId = orderResult.rows[0].id;
       billNo = orderResult.rows[0].billno;
 
       if (tablenumber && categoryid) {
         // --- DEBUG LOG 2: Check if the condition to occupy the table is met ---
         console.log(`Attempting to occupy table with Number: ${tablenumber} and Category ID: ${categoryid}`);
-        
+
         const updateResult = await client.query(
           `UPDATE restauranttables SET status = 'occupied' WHERE restaurantid = $1 AND tablenumber = $2 AND categoryid = $3`,
           [parsedRestaurantId, tablenumber, categoryid]
         );
-        
+
         // --- DEBUG LOG 3: See if the database update was successful ---
         console.log(`Table update query affected ${updateResult.rowCount} row(s).`);
       }
-      
+
       for (const item of orderitems) {
-          await client.query(
-              `INSERT INTO order_details (order_id, restaurantid, billno, menu_item_id, quantity, price_at_order, item_name, quantity_served)
+        await client.query(
+          `INSERT INTO order_details (order_id, restaurantid, billno, menu_item_id, quantity, price_at_order, item_name, quantity_served)
                VALUES ($1, $2, $3, $4, $5, $6, $7, 0)`,
-              [orderId, parsedRestaurantId, billNo, item.menuid, item.quantity, item.price, item.itemname]
-          );
+          [orderId, parsedRestaurantId, billNo, item.menuid, item.quantity, item.price, item.itemname]
+        );
       }
     }
 
     await client.query('COMMIT');
-    
+
     const roomName = `restaurant-${parsedRestaurantId}`;
     const kotPayload = {
-        message: `New KOT received for Bill No: ${billNo}`,
-        restaurant_id: parsedRestaurantId,
-        order_id: orderId,
-        bill_no: billNo,
+      message: `New KOT received for Bill No: ${billNo}`,
+      restaurant_id: parsedRestaurantId,
+      order_id: orderId,
+      bill_no: billNo,
     };
     io.to(roomName).emit('new-order-for-kitchen', kotPayload);
-    
+
     res.status(201).json({ message: 'Order updated successfully', billno: billNo });
 
   } catch (err) {
@@ -2184,12 +2182,12 @@ app.put('/api/orders/:orderId/finalize', async (req, res) => {
        RETURNING restaurantid, tablenumber, categoryid`,
       [paymentMode, finalStatus, customername, customerno, email_id, orderId]
     );
-    
+
     const { restaurantid, tablenumber, categoryid } = orderUpdateResult.rows[0];
 
     // If the order was for a table, free up the table
     if (tablenumber && categoryid) {
-       await client.query(
+      await client.query(
         `UPDATE restauranttables SET status = 'available' WHERE restaurantid = $1 AND tablenumber = $2 AND categoryid = $3`,
         [restaurantid, tablenumber, categoryid]
       );
@@ -2245,14 +2243,14 @@ app.get('/api/customers', async (req, res) => {
 // --- ADD THIS API ENDPOINT ---
 // 2. ADD the new API route to handle the request from the frontend
 app.post('/api/send-offer-email', async (req, res) => {
-    try {
-        // The req.body will contain { pdf, emails, offerTitle } from the frontend
-        await sendOfferEmail(req.body);
-        res.status(200).json({ message: 'Emails sent successfully!' });
-    } catch (error) {
-        console.error('SERVER ERROR: Failed to send emails.', error);
-        res.status(500).json({ message: 'An error occurred while sending the offer.' });
-    }
+  try {
+    // The req.body will contain { pdf, emails, offerTitle } from the frontend
+    await sendOfferEmail(req.body);
+    res.status(200).json({ message: 'Emails sent successfully!' });
+  } catch (error) {
+    console.error('SERVER ERROR: Failed to send emails.', error);
+    res.status(500).json({ message: 'An error occurred while sending the offer.' });
+  }
 });
 // In server.js
 
@@ -2287,7 +2285,7 @@ app.post('/api/orders/manual', async (req, res) => {
     `;
     // ADD "email_id" to the values array
     const values = [customername, customerno, totalamount, paymenttype, deliverytype, ispaid, orderdate, restaurantId, email_id];
-    
+
     const result = await pool.query(query, values);
     res.status(201).json(result.rows[0]);
 
@@ -2342,52 +2340,52 @@ app.get('/api/kitchen-orders', async (req, res) => {
 });
 
 app.put('/api/orders/:id/status', async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-    if (!status) return res.status(400).json({ error: 'Status is required' });
+  const { id } = req.params;
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ error: 'Status is required' });
 
-    if (status === 'served') {
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-            const orderUpdateResult = await client.query(
-                `UPDATE orders SET status = $1, served_time = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
-                [status, id]
-            );
-            if (orderUpdateResult.rowCount === 0) throw new Error('Order not found');
+  if (status === 'served') {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const orderUpdateResult = await client.query(
+        `UPDATE orders SET status = $1, served_time = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
+        [status, id]
+      );
+      if (orderUpdateResult.rowCount === 0) throw new Error('Order not found');
 
-            // **FIX**: When marking as served, set the served quantity equal to the total quantity.
-            await client.query(
-                `UPDATE order_details SET quantity_served = quantity WHERE order_id = $1`,
-                [id]
-            );
+      // **FIX**: When marking as served, set the served quantity equal to the total quantity.
+      await client.query(
+        `UPDATE order_details SET quantity_served = quantity WHERE order_id = $1`,
+        [id]
+      );
 
-            await client.query('COMMIT');
-            res.json(orderUpdateResult.rows[0]);
-        } catch (err) {
-            await client.query('ROLLBACK');
-            console.error(`Error marking order ${id} as served:`, err);
-            res.status(500).json({ error: 'Failed to update order status' });
-        } finally {
-            client.release();
-        }
-    } else {
-        let query;
-        const params = [status, id];
-        if (status === 'accepted') {
-            query = `UPDATE orders SET status = $1, accepted_time = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`;
-        } else {
-            query = `UPDATE orders SET status = $1 WHERE id = $2 RETURNING *`;
-        }
-        try {
-            const result = await pool.query(query, params);
-            if (result.rowCount === 0) return res.status(404).json({ error: 'Order not found' });
-            res.json(result.rows[0]);
-        } catch (err) {
-            console.error(`Error updating order status for order ${id}:`, err);
-            res.status(500).json({ error: 'Failed to update order status' });
-        }
+      await client.query('COMMIT');
+      res.json(orderUpdateResult.rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error(`Error marking order ${id} as served:`, err);
+      res.status(500).json({ error: 'Failed to update order status' });
+    } finally {
+      client.release();
     }
+  } else {
+    let query;
+    const params = [status, id];
+    if (status === 'accepted') {
+      query = `UPDATE orders SET status = $1, accepted_time = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`;
+    } else {
+      query = `UPDATE orders SET status = $1 WHERE id = $2 RETURNING *`;
+    }
+    try {
+      const result = await pool.query(query, params);
+      if (result.rowCount === 0) return res.status(404).json({ error: 'Order not found' });
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error(`Error updating order status for order ${id}:`, err);
+      res.status(500).json({ error: 'Failed to update order status' });
+    }
+  }
 });
 
 // ========== TIPS ROUTE (NEW) ==========
@@ -2418,7 +2416,7 @@ app.post('/api/tips', async (req, res) => {
     // The ON CONFLICT clause allows a guest to change their tip before the bill is finalized.
     const values = [restaurantid, staffid || null, orderid, parseFloat(amount)];
     const result = await pool.query(query, values);
-    
+
     res.status(201).json(result.rows[0]);
 
   } catch (error) {
@@ -2429,28 +2427,28 @@ app.post('/api/tips', async (req, res) => {
 
 // GET /api/tips?orderId=... - Called by BillingPage.js to retrieve the tip
 app.get('/api/tips', async (req, res) => {
-    const { orderId } = req.query;
+  const { orderId } = req.query;
 
-    if (!orderId) {
-        return res.status(400).json({ error: 'Order ID is required.' });
+  if (!orderId) {
+    return res.status(400).json({ error: 'Order ID is required.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT amount FROM tips WHERE order_id = $1 LIMIT 1',
+      [orderId]
+    );
+
+    if (result.rowCount > 0) {
+      res.json(result.rows[0]);
+    } else {
+      // If no tip is found, return 0.
+      res.json({ amount: 0 });
     }
-
-    try {
-        const result = await pool.query(
-            'SELECT amount FROM tips WHERE order_id = $1 LIMIT 1',
-            [orderId]
-        );
-
-        if (result.rowCount > 0) {
-            res.json(result.rows[0]);
-        } else {
-            // If no tip is found, return 0.
-            res.json({ amount: 0 });
-        }
-    } catch (error) {
-        console.error('Error fetching tip:', error);
-        res.status(500).json({ error: 'Failed to fetch tip.' });
-    }
+  } catch (error) {
+    console.error('Error fetching tip:', error);
+    res.status(500).json({ error: 'Failed to fetch tip.' });
+  }
 });
 // ========== STAFF + ATTENDANCE ==========
 
@@ -2537,7 +2535,7 @@ app.post('/api/attendance', async (req, res) => {
     if (staffCheck.rowCount === 0) {
       return res.status(400).json({ error: 'Staff not found or does not belong to this restaurant' });
     }
-    
+
     // The query now uses CURRENT_TIMESTAMP to set the check-in time.
     const result = await client.query(
       `INSERT INTO attendance (staffid, checkin, shift)
@@ -2549,7 +2547,7 @@ app.post('/api/attendance', async (req, res) => {
     console.error('Error inserting attendance:', err);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
-      client.release();
+    client.release();
   }
 });
 
@@ -2566,7 +2564,7 @@ app.put('/api/attendance/:id', async (req, res) => {
                     shiftduration = (CURRENT_TIMESTAMP - checkin)
                    WHERE id = $1
                    RETURNING *`;
-    
+
     const result = await client.query(query, [id]);
 
     if (result.rowCount === 0) {
@@ -2578,7 +2576,7 @@ app.put('/api/attendance/:id', async (req, res) => {
     console.error('PUT /api/attendance/:id error:', err);
     res.status(500).json({ error: 'Error updating attendance' });
   } finally {
-      client.release();
+    client.release();
   }
 });
 
@@ -2636,7 +2634,7 @@ app.post('/api/staff', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`, // Get the new ID
       [restaurantid, fullname, phonenumber, email, role, staffphoto, idcardphoto, monthly_salary || 0]
     );
-    
+
     // This is the newly created, correct ID from the 'staff' table.
     const newStaffId = staffResult.rows[0].id;
 
@@ -2652,7 +2650,7 @@ app.post('/api/staff', async (req, res) => {
     await client.query(userCredentialsQuery, [newStaffId, restaurantid, email, hashedPassword, role]);
 
     await client.query('COMMIT'); // Commit the transaction
-    
+
     // Return the full staff object you created
     const finalStaffResult = await pool.query('SELECT * FROM staff WHERE id = $1', [newStaffId]);
     res.status(201).json(finalStaffResult.rows[0]);
@@ -2676,53 +2674,53 @@ app.post('/api/staff', async (req, res) => {
  * @access  Private
  */
 app.put('/api/staff/:id', async (req, res) => {
-    const { id } = req.params;
-    const {
-        fullname, phonenumber, email, role, staffphoto, idcardphoto, monthly_salary // Added monthly_salary
-    } = req.body;
+  const { id } = req.params;
+  const {
+    fullname, phonenumber, email, role, staffphoto, idcardphoto, monthly_salary // Added monthly_salary
+  } = req.body;
 
-    if (!fullname || !role || !email) {
-        return res.status(400).json({ error: 'Full name, email, and role are required fields' });
+  if (!fullname || !role || !email) {
+    return res.status(400).json({ error: 'Full name, email, and role are required fields' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const oldStaffData = await client.query('SELECT email FROM staff WHERE id = $1', [id]);
+    if (oldStaffData.rowCount === 0) {
+      return res.status(404).json({ error: 'Staff member not found' });
     }
+    const oldEmail = oldStaffData.rows[0].email;
 
-    const client = await pool.connect();
-
-    try {
-        await client.query('BEGIN');
-
-        const oldStaffData = await client.query('SELECT email FROM staff WHERE id = $1', [id]);
-        if (oldStaffData.rowCount === 0) {
-            return res.status(404).json({ error: 'Staff member not found' });
-        }
-        const oldEmail = oldStaffData.rows[0].email;
-
-        // Update the staff table, now including monthly_salary
-        const staffUpdateResult = await pool.query(
-            `UPDATE staff SET
+    // Update the staff table, now including monthly_salary
+    const staffUpdateResult = await pool.query(
+      `UPDATE staff SET
               fullname = $1, phonenumber = $2, email = $3, role = $4, staffphoto = $5, idcardphoto = $6, monthly_salary = $7
             WHERE id = $8
             RETURNING *`,
-            [fullname, phonenumber, email, role, staffphoto, idcardphoto, monthly_salary || 0, id]
-        );
-        
-        await client.query(
-            `UPDATE usercredentials SET email = $1, role = $2 WHERE email = $3`,
-            [email, role, oldEmail]
-        );
-        
-        await client.query('COMMIT');
-        res.json(staffUpdateResult.rows[0]);
+      [fullname, phonenumber, email, role, staffphoto, idcardphoto, monthly_salary || 0, id]
+    );
 
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error('Error updating staff:', err);
-        if (err.code === '23505') {
-            return res.status(409).json({ error: 'Another user with this email already exists.' });
-        }
-        res.status(500).json({ error: 'Internal server error while updating staff' });
-    } finally {
-        client.release();
+    await client.query(
+      `UPDATE usercredentials SET email = $1, role = $2 WHERE email = $3`,
+      [email, role, oldEmail]
+    );
+
+    await client.query('COMMIT');
+    res.json(staffUpdateResult.rows[0]);
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating staff:', err);
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Another user with this email already exists.' });
     }
+    res.status(500).json({ error: 'Internal server error while updating staff' });
+  } finally {
+    client.release();
+  }
 });
 
 // ... (keep all your other routes)
@@ -2741,37 +2739,37 @@ app.delete('/api/staff/:id', async (req, res) => {
   const client = await pool.connect();
 
   try {
-      await client.query('BEGIN');
+    await client.query('BEGIN');
 
-      // Get the staff member's email before deleting them from the staff table
-      const staffRes = await client.query('SELECT email FROM staff WHERE id = $1', [id]);
-      if (staffRes.rowCount === 0) {
-          // If staff not found, no need to proceed.
-          return res.status(404).json({ error: 'Staff member not found' });
-      }
-      const { email } = staffRes.rows[0];
+    // Get the staff member's email before deleting them from the staff table
+    const staffRes = await client.query('SELECT email FROM staff WHERE id = $1', [id]);
+    if (staffRes.rowCount === 0) {
+      // If staff not found, no need to proceed.
+      return res.status(404).json({ error: 'Staff member not found' });
+    }
+    const { email } = staffRes.rows[0];
 
-      // Delete the user from the usercredentials table using their email.
-      if (email) {
-          await client.query('DELETE FROM usercredentials WHERE email = $1', [email]);
-      }
-      
-      // If your attendance table has a foreign key to staff with ON DELETE CASCADE,
-      // the next line is not needed. But it's safer to have it.
-      await client.query('DELETE FROM attendance WHERE staffid = $1', [id]);
+    // Delete the user from the usercredentials table using their email.
+    if (email) {
+      await client.query('DELETE FROM usercredentials WHERE email = $1', [email]);
+    }
 
-      // Finally, delete the staff member from the staff table.
-      await client.query('DELETE FROM staff WHERE id = $1', [id]);
+    // If your attendance table has a foreign key to staff with ON DELETE CASCADE,
+    // the next line is not needed. But it's safer to have it.
+    await client.query('DELETE FROM attendance WHERE staffid = $1', [id]);
 
-      await client.query('COMMIT');
-      res.json({ message: 'Staff member and their credentials deleted successfully' });
+    // Finally, delete the staff member from the staff table.
+    await client.query('DELETE FROM staff WHERE id = $1', [id]);
+
+    await client.query('COMMIT');
+    res.json({ message: 'Staff member and their credentials deleted successfully' });
 
   } catch (err) {
-      await client.query('ROLLBACK');
-      console.error('Error deleting staff:', err);
-      res.status(500).json({ error: 'Internal server error while deleting staff' });
+    await client.query('ROLLBACK');
+    console.error('Error deleting staff:', err);
+    res.status(500).json({ error: 'Internal server error while deleting staff' });
   } finally {
-      client.release();
+    client.release();
   }
 });
 //PAYROLL
@@ -2783,21 +2781,21 @@ app.delete('/api/staff/:id', async (req, res) => {
 
 // GET Payroll data for a given month
 app.get('/api/payroll', async (req, res) => {
-    const { restaurantId, month } = req.query; // month should be in 'YYYY-MM-DD' format (e.g., '2025-08-01')
+  const { restaurantId, month } = req.query; // month should be in 'YYYY-MM-DD' format (e.g., '2025-08-01')
 
-    if (!restaurantId || !month) {
-        return res.status(400).json({ error: 'Restaurant ID and month are required.' });
-    }
+  if (!restaurantId || !month) {
+    return res.status(400).json({ error: 'Restaurant ID and month are required.' });
+  }
 
-    try {
-        const firstDayOfMonth = month;
-        const lastDayOfMonth = new Date(new Date(month).getFullYear(), new Date(month).getMonth() + 1, 0).toISOString().split('T')[0];
+  try {
+    const firstDayOfMonth = month;
+    const lastDayOfMonth = new Date(new Date(month).getFullYear(), new Date(month).getMonth() + 1, 0).toISOString().split('T')[0];
 
-        // This complex query does everything in one go for efficiency:
-        // 1. Fetches all staff from the restaurant.
-        // 2. LEFT JOINs any existing payroll data for the month.
-        // 3. LEFT JOINs a subquery that calculates actual present days from the attendance table.
-        const query = `
+    // This complex query does everything in one go for efficiency:
+    // 1. Fetches all staff from the restaurant.
+    // 2. LEFT JOINs any existing payroll data for the month.
+    // 3. LEFT JOINs a subquery that calculates actual present days from the attendance table.
+    const query = `
             WITH AttendanceSummary AS (
                 SELECT
                     staffid,
@@ -2827,36 +2825,36 @@ app.get('/api/payroll', async (req, res) => {
                 s.fullname;
         `;
 
-        const result = await pool.query(query, [restaurantId, firstDayOfMonth, lastDayOfMonth]);
-        res.json(result.rows);
+    const result = await pool.query(query, [restaurantId, firstDayOfMonth, lastDayOfMonth]);
+    res.json(result.rows);
 
-    } catch (err) {
-        console.error('Error fetching payroll data:', err);
-        res.status(500).json({ error: 'Server error fetching payroll data' });
-    }
+  } catch (err) {
+    console.error('Error fetching payroll data:', err);
+    res.status(500).json({ error: 'Server error fetching payroll data' });
+  }
 });
 
 // POST (Save) Payroll data for a staff member for a specific month
 app.post('/api/payroll', async (req, res) => {
-    const {
-        staffId,
-        restaurantId,
-        payrollMonth, // 'YYYY-MM-DD'
-        monthlySalary,
-        presentDays,
-        absentDays,
-        bonus,
-        alreadyPaid,
-        status
-    } = req.body;
+  const {
+    staffId,
+    restaurantId,
+    payrollMonth, // 'YYYY-MM-DD'
+    monthlySalary,
+    presentDays,
+    absentDays,
+    bonus,
+    alreadyPaid,
+    status
+  } = req.body;
 
-    if (!staffId || !restaurantId || !payrollMonth) {
-        return res.status(400).json({ error: 'staffId, restaurantId, and payrollMonth are required.' });
-    }
+  if (!staffId || !restaurantId || !payrollMonth) {
+    return res.status(400).json({ error: 'staffId, restaurantId, and payrollMonth are required.' });
+  }
 
-    try {
-        // UPSERT operation: Insert a new record, or update the existing one if it already exists for that staff/month.
-        const query = `
+  try {
+    // UPSERT operation: Insert a new record, or update the existing one if it already exists for that staff/month.
+    const query = `
             INSERT INTO payroll (staff_id, restaurant_id, payroll_month, monthly_salary, present_days, absent_days, bonus, already_paid, status)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (staff_id, payroll_month) DO UPDATE SET
@@ -2868,61 +2866,61 @@ app.post('/api/payroll', async (req, res) => {
                 status = EXCLUDED.status
             RETURNING *;
         `;
-        const values = [staffId, restaurantId, payrollMonth, monthlySalary, presentDays, absentDays, bonus, alreadyPaid, status];
-        const result = await pool.query(query, values);
-        res.status(200).json(result.rows[0]);
+    const values = [staffId, restaurantId, payrollMonth, monthlySalary, presentDays, absentDays, bonus, alreadyPaid, status];
+    const result = await pool.query(query, values);
+    res.status(200).json(result.rows[0]);
 
-    } catch (err) {
-        console.error('Error saving payroll data:', err);
-        res.status(500).json({ error: 'Server error saving payroll data.' });
-    }
+  } catch (err) {
+    console.error('Error saving payroll data:', err);
+    res.status(500).json({ error: 'Server error saving payroll data.' });
+  }
 });
 
 
 // Create a new valet parking record
 // POST /api/valet - Adds a new car to the database and sends the token email.
 app.post('/api/valet', async (req, res) => {
-    console.log('POST /api/valet - Received new car request');
-    const {
-        token_number,
-        owner_name,
-        phone_number,
-        car_number,
-        email,
-        status = 'With Us',
-        restaurantId
-    } = req.body;
+  console.log('POST /api/valet - Received new car request');
+  const {
+    token_number,
+    owner_name,
+    phone_number,
+    car_number,
+    email,
+    status = 'With Us',
+    restaurantId
+  } = req.body;
 
-    if (!token_number || !owner_name || !phone_number || !car_number || !email || !restaurantId) {
-        return res.status(400).json({ message: 'Missing required fields.' });
-    }
+  if (!token_number || !owner_name || !phone_number || !car_number || !email || !restaurantId) {
+    return res.status(400).json({ message: 'Missing required fields.' });
+  }
 
-    try {
-        // First, save the car details to the database within a transaction
-        const result = await pool.query(
-            `INSERT INTO valet_parking
+  try {
+    // First, save the car details to the database within a transaction
+    const result = await pool.query(
+      `INSERT INTO valet_parking
              (token_number, owner_name, phone_number, car_number, status, restaurantId)
              VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING *`,
-            [token_number, owner_name, phone_number, car_number, status, restaurantId]
-        );
-        const newCar = result.rows[0];
+      [token_number, owner_name, phone_number, car_number, status, restaurantId]
+    );
+    const newCar = result.rows[0];
 
-        // Then, attempt to send the email
-        console.log(`Attempting to send email via emailService to ${email}...`);
-        await sendTokenEmail(email, token_number, owner_name, car_number);
+    // Then, attempt to send the email
+    console.log(`Attempting to send email via emailService to ${email}...`);
+    await sendTokenEmail(email, token_number, owner_name, car_number);
 
-        console.log('Car details saved:', newCar);
+    console.log('Car details saved:', newCar);
 
-        res.status(201).json({
-            message: `Token sent to ${email} and car details saved.`,
-            car: newCar
-        });
+    res.status(201).json({
+      message: `Token sent to ${email} and car details saved.`,
+      car: newCar
+    });
 
-    } catch (error) {
-        console.error('The transaction or email service failed:', error);
-        res.status(500).json({ message: 'Failed to save car details or send token email. Please check server configuration.' });
-    }
+  } catch (error) {
+    console.error('The transaction or email service failed:', error);
+    res.status(500).json({ message: 'Failed to save car details or send token email. Please check server configuration.' });
+  }
 });
 
 // Get all valet cars for a restaurant
@@ -3111,28 +3109,28 @@ app.post('/api/feedback', async (req, res) => {
 });
 // GET /api/restaurants/:id
 app.put('/api/restaurants/:id/gst', async (req, res) => {
-    const { id } = req.params;
-    const { gst_number } = req.body;
+  const { id } = req.params;
+  const { gst_number } = req.body;
 
-    // Basic validation for the GST number format
-    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-    if (!gst_number || !gstRegex.test(gst_number)) {
-        return res.status(400).json({ error: 'A valid 15-digit GST number is required.' });
-    }
+  // Basic validation for the GST number format
+  const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+  if (!gst_number || !gstRegex.test(gst_number)) {
+    return res.status(400).json({ error: 'A valid 15-digit GST number is required.' });
+  }
 
-    try {
-        const result = await pool.query(
-            `UPDATE restaurants SET gst_number = $1 WHERE id = $2 RETURNING *`,
-            [gst_number, id]
-        );
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Restaurant not found.' });
-        }
-        res.json(result.rows[0]);
-    } catch (err) {
-        console.error(`Error updating GST for restaurant ${id}:`, err);
-        res.status(500).json({ error: 'Server error while updating GST number.' });
+  try {
+    const result = await pool.query(
+      `UPDATE restaurants SET gst_number = $1 WHERE id = $2 RETURNING *`,
+      [gst_number, id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Restaurant not found.' });
     }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(`Error updating GST for restaurant ${id}:`, err);
+    res.status(500).json({ error: 'Server error while updating GST number.' });
+  }
 });
 
 
@@ -3159,36 +3157,36 @@ app.get('/api/restaurants/:id', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
   const fs = require('fs');
-const path = require('path');
+  const path = require('path');
 
-// Make a folder to store bills if not exists
-const billsDir = path.join(__dirname, 'public', 'bills');
-if (!fs.existsSync(billsDir)) {
-  fs.mkdirSync(billsDir, { recursive: true });
-}
+  // Make a folder to store bills if not exists
+  const billsDir = path.join(__dirname, 'public', 'bills');
+  if (!fs.existsSync(billsDir)) {
+    fs.mkdirSync(billsDir, { recursive: true });
+  }
 
-// Serve static files
-app.use('/bills', express.static(billsDir));
+  // Serve static files
+  app.use('/bills', express.static(billsDir));
 
-app.post('/api/upload-bill', async (req, res) => {
-  try {
-    const { pdfBase64, filename } = req.body;
-    if (!pdfBase64 || !filename) {
-      return res.status(400).json({ error: 'Missing data' });
+  app.post('/api/upload-bill', async (req, res) => {
+    try {
+      const { pdfBase64, filename } = req.body;
+      if (!pdfBase64 || !filename) {
+        return res.status(400).json({ error: 'Missing data' });
+      }
+
+      const filePath = path.join(billsDir, filename);
+      const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+      fs.writeFileSync(filePath, pdfBuffer);
+
+      // Public URL (example: http://localhost:5000/bills/Bill_123.pdf)
+      const fileUrl = `${req.protocol}://${req.get('host')}/bills/${filename}`;
+      res.json({ url: fileUrl });
+    } catch (err) {
+      console.error('Error saving bill PDF:', err);
+      res.status(500).json({ error: 'Failed to save PDF' });
     }
-
-    const filePath = path.join(billsDir, filename);
-    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-    fs.writeFileSync(filePath, pdfBuffer);
-
-    // Public URL (example: http://localhost:5000/bills/Bill_123.pdf)
-    const fileUrl = `${req.protocol}://${req.get('host')}/bills/${filename}`;
-    res.json({ url: fileUrl });
-  } catch (err) {
-    console.error('Error saving bill PDF:', err);
-    res.status(500).json({ error: 'Failed to save PDF' });
-  }
-});
+  });
 });
 
 

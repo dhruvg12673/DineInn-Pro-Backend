@@ -3,6 +3,12 @@ const nodemailer = require('nodemailer');
 const router = express.Router();
 
 router.post('/api/send-bill', async (req, res) => {
+  // Environment guard: skip mailing on Render (deferred to local wrapper)
+  if (process.env.IS_RENDER === 'true') {
+    console.log('⏭️ Mailing skipped on Render');
+    return res.status(200).json({ message: 'Mailing skipped on Render' });
+  }
+
   const { email, name, pdfBase64, filename } = req.body;
 
   if (!email || !pdfBase64) {

@@ -1,16 +1,22 @@
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // ✅ Mandatory for Port 465
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASS
-  }
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true, // ✅ Mandatory for Port 465
+    auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASS
+    }
 });
 
 const sendTokenEmail = async (toEmail, tokenNumber, ownerName, carNumber) => {
+    // Environment guard: skip mailing on Render (deferred to local wrapper)
+    if (process.env.IS_RENDER === 'true') {
+        console.log('⏭️ Mailing skipped on Render');
+        return;
+    }
+
     const mailOptions = {
         // Use your Gmail address here
         from: `"Your Valet Service" <${process.env.GMAIL_USER}>`,

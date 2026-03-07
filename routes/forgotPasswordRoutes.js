@@ -6,20 +6,20 @@ const bcrypt = require('bcryptjs');
 
 // This wrapper allows the file to receive the 'pool' object from server.js
 module.exports = (pool) => {
-  
+
   // In-memory store for OTPs.
   const otpStore = {};
 
   // Your working Nodemailer transport configuration
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // ✅ Mandatory for Port 465
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASS
-  }
-});
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true, // ✅ Mandatory for Port 465
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASS
+    }
+  });
 
 
 
@@ -28,6 +28,12 @@ const transporter = nodemailer.createTransport({
    * @route   POST /api/forgot-password/send-otp
    */
   router.post('/send-otp', async (req, res) => {
+    // Environment guard: skip mailing on Render (deferred to local wrapper)
+    if (process.env.IS_RENDER === 'true') {
+      console.log('⏭️ Mailing skipped on Render');
+      return res.status(200).json({ message: 'Mailing skipped on Render' });
+    }
+
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ error: 'Email is required.' });
@@ -53,7 +59,7 @@ const transporter = nodemailer.createTransport({
         subject: 'Your Password Reset OTP',
         html: `<p>Your OTP is: <strong>${otp}</strong>. It is valid for 5 minutes.</p>`,
       };
-      
+
       await transporter.sendMail(mailOptions);
       res.status(200).json({ message: 'OTP sent successfully.' });
 
@@ -69,18 +75,18 @@ const transporter = nodemailer.createTransport({
   router.post('/verify-otp', (req, res) => {
     const { email, otp } = req.body;
     if (!email || !otp) {
-        return res.status(400).json({ error: 'Email and OTP are required.' });
+      return res.status(400).json({ error: 'Email and OTP are required.' });
     }
     const storedOtpData = otpStore[email];
     if (!storedOtpData) {
-        return res.status(400).json({ error: 'Invalid OTP. Please request a new one.' });
+      return res.status(400).json({ error: 'Invalid OTP. Please request a new one.' });
     }
     if (Date.now() > storedOtpData.expires) {
-        delete otpStore[email];
-        return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+      delete otpStore[email];
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
     }
     if (storedOtpData.otp !== otp) {
-        return res.status(400).json({ error: 'Invalid OTP.' });
+      return res.status(400).json({ error: 'Invalid OTP.' });
     }
     res.status(200).json({ message: 'OTP verified successfully.' });
   });
@@ -91,31 +97,31 @@ const transporter = nodemailer.createTransport({
   router.post('/reset-password', async (req, res) => {
     const { email, otp, password } = req.body;
     if (!email || !otp || !password) {
-        return res.status(400).json({ error: 'Email, OTP, and new password are required.' });
+      return res.status(400).json({ error: 'Email, OTP, and new password are required.' });
     }
 
     const storedOtpData = otpStore[email];
     if (!storedOtpData || storedOtpData.otp !== otp || Date.now() > storedOtpData.expires) {
-        return res.status(400).json({ error: 'Invalid or expired session. Please start over.' });
+      return res.status(400).json({ error: 'Invalid or expired session. Please start over.' });
     }
 
     try {
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
 
-        await pool.query(
-          'UPDATE usercredentials SET password = $1 WHERE email = $2',
-          [hashedPassword, email]
-        );
-        
-        console.log(`Password for ${email} has been updated.`);
-        
-        delete otpStore[email];
-        res.status(200).json({ message: 'Password has been reset successfully.' });
+      await pool.query(
+        'UPDATE usercredentials SET password = $1 WHERE email = $2',
+        [hashedPassword, email]
+      );
+
+      console.log(`Password for ${email} has been updated.`);
+
+      delete otpStore[email];
+      res.status(200).json({ message: 'Password has been reset successfully.' });
 
     } catch (error) {
-        console.error('Error resetting password:', error);
-        res.status(500).json({ error: 'An internal server error occurred.' });
+      console.error('Error resetting password:', error);
+      res.status(500).json({ error: 'An internal server error occurred.' });
     }
   });
 
