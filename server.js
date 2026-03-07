@@ -1,4 +1,26 @@
-require("dotenv").config();
+const path = require('path');
+const fs = require('fs');
+const util = require('util');
+
+// When running as a pkg-compiled .exe, resolve .env relative to the exe location.
+// When running via `node server.js`, resolve relative to the script directory.
+const envPath = process.pkg
+  ? path.join(path.dirname(process.execPath), '.env')
+  : path.join(__dirname, '.env');
+
+// Redirect logging to a file when packaged
+if (process.pkg) {
+  const logFile = fs.createWriteStream(path.join(path.dirname(process.execPath), 'service.log'), { flags: 'a' });
+  console.log = function () {
+    logFile.write(util.format.apply(null, arguments) + '\n');
+  };
+  console.error = function () {
+    logFile.write('ERROR: ' + util.format.apply(null, arguments) + '\n');
+  };
+}
+
+require('dotenv').config({ path: envPath });
+
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -6,7 +28,6 @@ const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 const { Server } = require('socket.io');
 const bcrypt = require('bcryptjs');
-const dotenv = require('dotenv');
 const { sendOfferEmail } = require('./offerMailer');
 const { format, subDays, subMonths } = require('date-fns'); // Ensure this is present
 
