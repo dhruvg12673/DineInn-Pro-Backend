@@ -44,13 +44,18 @@ pipeline {
         stage('Vercel Health Check') {
             steps {
                 echo "Verifying Vercel Deployment Health..."
-                // This uses curl to check if the Vercel URL returns a 200 OK status
-                // Note: Windows 10/11 includes curl by default
-                bat "curl -s -o /dev/null -I -w \"%%{http_code}\" %VERCEL_URL% > status.txt"
+                // Fix: Use double %% for Windows and remove the redirect to status.txt inside the command
                 script {
-                    def status = readFile('status.txt').trim()
-                    if (status == "200" || status == "404") { // 404 is okay if you don't have a '/' route
-                        echo "Vercel is reachable. Status: ${status}"
+                    // We run the command and capture the output directly into a variable
+                    def status = bat(script: "curl -s -o /dev/null -I -w %%{http_code} ${VERCEL_URL}", returnStdout: true).trim()
+                    
+                    // Jenkins bat output usually includes the command itself, so we split it to get just the code
+                    status = status.split("\r?\n")[-1] 
+                    
+                    echo "Vercel Response Code: ${status}"
+                    
+                    if (status == "200" || status == "404" || status == "301" || status == "308") {
+                        echo "Vercel/Render is reachable."
                     } else {
                         error "Vercel health check failed with status: ${status}"
                     }
