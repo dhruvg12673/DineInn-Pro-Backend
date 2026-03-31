@@ -41,24 +41,17 @@ pipeline {
             }
         }
 
-        stage('Vercel Health Check') {
+        stage('Backend Deployment Health Check') {
             steps {
-                echo "Verifying Vercel Deployment Health..."
-                // Fix: Use double %% for Windows and remove the redirect to status.txt inside the command
+                echo "Verifying Backend Deployment Health..."
                 script {
-                    // We run the command and capture the output directly into a variable
-                    def status = bat(script: "curl -s -o /dev/null -I -w %%{http_code} ${VERCEL_URL}", returnStdout: true).trim()
-                    
-                    // Jenkins bat output usually includes the command itself, so we split it to get just the code
-                    status = status.split("\r?\n")[-1] 
-                    
-                    echo "Vercel Response Code: ${status}"
-                    
-                    if (status == "200" || status == "404" || status == "301" || status == "308") {
-                        echo "Vercel/Render is reachable."
-                    } else {
-                        error "Vercel health check failed with status: ${status}"
-                    }
+                    /* Explanation:
+                       1. %%{http_code} -> Double '%' is required to escape the character in Windows Batch.
+                       2. | findstr 200 -> This looks for '200' in the curl output.
+                       3. If '200' is not found, findstr returns a non-zero exit code, 
+                          which automatically fails the Jenkins stage.
+                    */
+                    bat "curl -s -o /dev/null -I -w %%{http_code} ${VERCEL_URL} | findstr 200"
                 }
             }
         }
