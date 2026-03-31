@@ -5,36 +5,28 @@ pipeline {
         IMAGE_NAME = 'dineinnpro-backend'
         RDS_HOSTNAME = 'restaurant-db.cxowmcm285wq.ap-south-1.rds.amazonaws.com'
         DB_NAME = 'postgres'
-        VERCEL_URL = 'https://dineinn-pro-backend.onrender.com' // Replace with your actual Vercel link
+        VERCEL_URL = 'https://dineinn-pro-backend.onrender.com'
     }
     stages {
         stage('GitHub Repo Check') {
             steps {
-                echo "Verifying Repository Connection..."
                 checkout scm
-                // Check if server.js exists in the workspace
-                bat "if not exist server.js (echo 'Error: server.js not found' && exit 1)"
+                bat "if not exist server.js (exit 1)"
             }
         }
 
         stage('Library Check') {
             steps {
-                echo "Checking if Node.js and dependencies are valid..."
-                bat "node -v"
-                bat "npm -v"
-                // This checks if package.json exists and installs libs to verify they work
-                bat "npm install" 
+                bat "npm install"
             }
         }
 
         stage('Build & Push Docker') {
             steps {
                 script {
-                    echo "Creating Docker Image..."
                     bat "docker build -t %DOCKER_USER%/%IMAGE_NAME%:latest ."
-                    
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
-                        bat "echo %PASS% | docker login -u %USER% --password-stdin"
+                        bat "echo %PASS%| docker login -u %USER% --password-stdin"
                         bat "docker push %DOCKER_USER%/%IMAGE_NAME%:latest"
                     }
                 }
@@ -52,15 +44,7 @@ pipeline {
         stage('Backend Deployment Health Check') {
             steps {
                 echo "Verifying Backend Deployment Health..."
-                script {
-                    /* Explanation:
-                       1. %%{http_code} -> Double '%' is required to escape the character in Windows Batch.
-                       2. | findstr 200 -> This looks for '200' in the curl output.
-                       3. If '200' is not found, findstr returns a non-zero exit code, 
-                          which automatically fails the Jenkins stage.
-                    */
-                    bat "curl -s -o /dev/null -I -w %%{http_code} ${VERCEL_URL} | findstr 200"
-                }
+                bat "curl -s -o /dev/null -I -w %%{http_code} %VERCEL_URL% | findstr 200"
             }
         }
 
