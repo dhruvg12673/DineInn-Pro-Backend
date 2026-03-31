@@ -51,10 +51,16 @@ pipeline {
         stage('Deploy to Production') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dineinn-rds-creds', passwordVariable: 'PW', usernameVariable: 'USR')]) {
-                    echo "Deploying to local container..."
+                    echo "Attempting to clear port 5000 and deploy..."
                     bat """
                         @echo off
-                        echo Cleaning up old containers...
+                        :: Find PID on port 5000 and kill it if it exists
+                        for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5000') do (
+                            echo Killing process %%a using port 5000...
+                            taskkill /f /pid %%a 2>nul
+                        )
+
+                        :: Standard Docker cleanup
                         docker stop %IMAGE_NAME% >nul 2>&1 || ver >nul
                         docker rm %IMAGE_NAME% >nul 2>&1 || ver >nul
                         
