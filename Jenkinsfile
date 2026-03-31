@@ -41,6 +41,14 @@ pipeline {
             }
         }
 
+        stage('Database Online Check') {
+            steps {
+                echo "Checking if AWS RDS is reachable..."
+                // This attempts to connect to the port 5432 using PowerShell
+                bat "powershell Test-NetConnection %RDS_HOSTNAME% -Port 5432"
+            }
+        }
+
         stage('Backend Deployment Health Check') {
             steps {
                 echo "Verifying Backend Deployment Health..."
@@ -61,9 +69,12 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'dineinn-rds-creds', passwordVariable: 'PW', usernameVariable: 'USR')]) {
                     echo "Deploying to local container..."
                     bat """
-                        docker pull %DOCKER_USER%/%IMAGE_NAME%:latest
-                        docker stop %IMAGE_NAME% || true
-                        docker rm %IMAGE_NAME% || true
+                        @echo off
+                        echo Cleaning up old containers...
+                        docker stop %IMAGE_NAME% >nul 2>&1 || ver >nul
+                        docker rm %IMAGE_NAME% >nul 2>&1 || ver >nul
+                        
+                        echo Starting new container...
                         docker run -d --name %IMAGE_NAME% -p 5000:5000 ^
                         -e DATABASE_URL=postgresql://%USR%:%PW%@%RDS_HOSTNAME%:5432/%DB_NAME% ^
                         %DOCKER_USER%/%IMAGE_NAME%:latest
@@ -71,5 +82,4 @@ pipeline {
                 }
             }
         }
-    }
 }
